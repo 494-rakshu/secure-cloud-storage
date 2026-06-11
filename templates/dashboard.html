@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Dashboard | Secure Cloud Storage</title>
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+
+<nav class="navbar">
+
+    <div class="logo">
+        SecureCloud
+    </div>
+
+    <div class="nav-links">
+        <a href="/dashboard">Dashboard</a>
+        <a href="/logout">Logout</a>
+    </div>
+
+</nav>
+
+<div style="text-align:center; margin-top:40px;">
+
+    <h1>
+        Welcome, {{ user_name }}
+    </h1>
+
+    <p style="color:#b8c7e0;">
+        Manage your cloud files securely.
+    </p>
+
+</div>
+
+<div class="dashboard">
+
+    <div class="card">
+        <h2>Upload Files</h2>
+        <p>Upload documents securely.</p>
+    </div>
+
+    <div class="card">
+        <h2>My Files</h2>
+        <p>View stored files.</p>
+    </div>
+
+    <div class="card">
+        <h2>Storage</h2>
+        <p>Monitor storage usage.</p>
+    </div>
+
+    <div class="card">
+        <h2>Security</h2>
+        <p>Track account activity.</p>
+    </div>
+
+</div>
+
+</body>
+</html>
