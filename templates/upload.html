@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Upload Files | Secure Cloud Storage</title>
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+
+<nav class="navbar">
+
+    <div class="logo">
+        SecureCloud
+    </div>
+
+    <div class="nav-links">
+        <a href="/dashboard">Dashboard</a>
+        <a href="/logout">Logout</a>
+    </div>
+
+</nav>
+
+<div class="container">
+
+    <h1>Upload File</h1>
+
+    <form action="/upload"
+          method="POST"
+          enctype="multipart/form-data">
+
+        <label>Select File</label>
+
+        <input
+            type="file"
+            name="file"
+            required>
+
+        <button type="submit">
+            Upload File
+        </button>
+
+    </form>
+
+    <br>
+
+    <div style="text-align:center;">
+
+        <a href="/dashboard"
+           style="color:#64ffda;text-decoration:none;">
+            ← Back to Dashboard
+        </a>
+
+    </div>
+
+</div>
+
+</body>
+</html>

@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Security | Secure Cloud</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+
+<nav class="navbar">
+    <div class="logo">SecureCloud</div>
+
+    <div class="nav-links">
+        <a href="/dashboard">Dashboard</a>
+        <a href="/logout">Logout</a>
+    </div>
+</nav>
+
+<div style="text-align:center; margin-top:50px;">
+
+    <h1>🔐 Login Activity</h1>
+    <p style="color:#b8c7e0;">Your recent login history</p>
+
+    <div class="card" style="max-width:600px; margin:auto; text-align:left;">
+
+        {% if logs %}
+
+            {% for log in logs %}
+                <p style="padding:10px; border-bottom:1px solid rgba(255,255,255,0.1);">
+                    👤 {{ log[0] }} <br>
+                    🕒 {{ log[1] }}
+                </p>
+            {% endfor %}
+
+        {% else %}
+            <p>No login history found</p>
+        {% endif %}
+
+    </div>
+
+</div>
+
+</body>
+</html>

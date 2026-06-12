@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Storage | Secure Cloud</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+
+<nav class="navbar">
+    <div class="logo">SecureCloud</div>
+    <div class="nav-links">
+        <a href="/dashboard">Dashboard</a>
+        <a href="/logout">Logout</a>
+    </div>
+</nav>
+
+<div style="text-align:center; margin-top:50px;">
+
+    <h1>Storage Usage</h1>
+
+    <div class="card" style="max-width:350px; margin:auto;">
+
+        <h2>Total Files</h2>
+        <p style="font-size:28px;">{{ file_count }}</p>
+
+        <h2>Storage Used</h2>
+        <p style="font-size:22px;">{{ storage_used_mb }} MB</p>
+
+    </div>
+
+</div>
+
+</body>
+</html>
