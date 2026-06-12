@@ -186,7 +186,6 @@ def files():
     )
 
     data = cursor.fetchall()
-
     conn.close()
 
     return render_template("files.html", files=data)
@@ -240,15 +239,15 @@ def security():
 
     return render_template("security.html", logs=logs)
 
-@app.route("/download/<stored_name>")
-def download_file(stored_name):
+@app.route("/download/<filename>")
+def download_file(filename):
 
     if "user_name" not in session:
         return redirect("/login")
 
     return send_from_directory(
         app.config["UPLOAD_FOLDER"],
-        stored_name,
+        filename,
         as_attachment=True
     )
 
