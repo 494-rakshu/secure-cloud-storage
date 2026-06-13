@@ -1,6 +1,50 @@
-venv/
+# =========================
+# Python cache files
+# =========================
 __pycache__/
-*.db
-.env
-uploads/
 *.pyc
+*.pyo
+*.pyd
+
+# =========================
+# Virtual environment
+# =========================
+venv/
+env/
+.venv/
+
+# =========================
+# Database files (SQLite)
+# =========================
+*.db
+*.sqlite3
+
+# =========================
+# Environment variables
+# =========================
+.env
+.env.*
+
+# =========================
+# Uploaded files (cloud storage data)
+# ⚠️ Important: not pushed to GitHub
+# =========================
+uploads/
+
+# =========================
+# IDE / Editor files
+# =========================
+.vscode/
+.idea/
+
+# =========================
+# OS files
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# Debug / helper scripts
+# =========================
+add_upload_date.py
+check_table.py
