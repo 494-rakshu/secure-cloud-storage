@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Profile | Secure Cloud Storage</title>
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+
+<nav class="navbar">
+
+    <div class="logo">
+        SecureCloud
+    </div>
+
+    <div class="nav-links">
+        <a href="/dashboard">Dashboard</a>
+        <a href="/logout">Logout</a>
+    </div>
+
+</nav>
+
+<div class="container">
+
+    <h1>My Profile</h1>
+
+    <div class="card">
+
+        <h2>Name</h2>
+        <p>{{ user[0] }}</p>
+
+        <h2>Email</h2>
+        <p>{{ user[1] }}</p>
+        
+        <h2>Total Files</h2>
+        <p>{{ total_files }}</p>
+
+        <h2>Storage Used</h2>
+        <p>{{ storage_mb }} MB</p>
+
+    </div>
+
+    <br>
+
+    <a href="/dashboard"
+       style="color:#64ffda;text-decoration:none;">
+        ← Back to Dashboard
+    </a>
+
+</div>
+
+</body>
+</html>
