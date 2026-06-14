@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+    <title>Admin Login | Secure Cloud Storage</title>
+
+
+<link rel="stylesheet"
+      href="{{ url_for('static', filename='style.css') }}">
+
+
+</head>
+
+<body>
+
+<div class="container">
+
+
+<h1>Admin Login</h1>
+
+{% if error %}
+<p style="color:red; text-align:center; margin-bottom:15px;">
+    {{ error }}
+</p>
+{% endif %}
+
+<form method="POST">
+
+    <label>Email</label>
+
+    <input
+        type="email"
+        name="email"
+        placeholder="Enter Admin Email"
+        required>
+
+    <br><br>
+
+    <label>Password</label>
+
+    <input
+        type="password"
+        name="password"
+        placeholder="Enter Admin Password"
+        required>
+
+    <br><br>
+
+    <button type="submit">
+        Login
+    </button>
+
+</form>
+
+
+</div>
+
+</body>
+</html>

@@ -113,6 +113,16 @@
     </div>
 </a>
 
+{% if session.get('admin') %}
+
+<a href="/admin" style="text-decoration:none; color:inherit;">
+    <div class="card">
+        <h2>Admin Panel</h2>
+        <p>Manage users and files.</p>
+    </div>
+</a>
+
+{% endif %}
 
 </div>
 

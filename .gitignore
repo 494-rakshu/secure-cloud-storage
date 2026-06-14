@@ -48,3 +48,13 @@ Thumbs.db
 # =========================
 add_upload_date.py
 check_table.py
+secret.key
+backup_before_encryption/
+instance/
+*.log
+logs/
+# =========================
+# Local scripts / sensitive utilities
+# =========================
+check_users.py
+generate_key.py

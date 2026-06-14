@@ -1,12 +1,22 @@
 from flask import Flask, render_template, request, redirect, session, send_from_directory
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
+from cryptography.fernet import Fernet
+from flask import send_file
+import io
 import sqlite3
 import os
 import uuid
 import datetime
+ADMIN_EMAIL = "admin@securecloud.com"
+ADMIN_PASSWORD = "admin123"
 
-app = Flask(__name__)
+with open("secret.key", "rb") as key_file:
+    key = key_file.read()
+    fernet = Fernet(key)
+
+
+app = Flask(__name__)  
 app.secret_key = "secure_cloud_storage"
 
 UPLOAD_FOLDER = "uploads"
@@ -176,10 +186,16 @@ def upload_file():
                 conn.close()
                 return "File already uploaded!"
 
+             
             unique_name = str(uuid.uuid4()) + "_" + original_name
             filepath = os.path.join(app.config["UPLOAD_FOLDER"], unique_name)
 
-            file.save(filepath)
+            file_data = file.read()
+
+            encrypted_data = fernet.encrypt(file_data)
+
+            with open(filepath, "wb") as encrypted_file:
+                encrypted_file.write(encrypted_data)
 
             upload_date = datetime.datetime.now().strftime("%d %b %Y, %I:%M %p")
 
@@ -197,7 +213,7 @@ def upload_file():
 
             return redirect("/files")
 
-        return "Invalid file type"
+        flash("Invalid file type")
 
     return render_template("upload.html")
 
@@ -285,10 +301,38 @@ def download_file(filename):
     if "user_name" not in session:
         return redirect("/login")
 
-    return send_from_directory(
+    filepath = os.path.join(
         app.config["UPLOAD_FOLDER"],
-        filename,
-        as_attachment=True
+        filename
+    )
+
+    with open("secret.key", "rb") as key_file:
+        key = key_file.read()
+
+    fernet = Fernet(key)
+
+    with open(filepath, "rb") as file:
+        encrypted_data = file.read()
+
+    decrypted_data = fernet.decrypt(encrypted_data)
+
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "SELECT filename FROM files WHERE stored_name=?",
+        (filename,)
+    )
+
+    result = cursor.fetchone()
+    conn.close()
+
+    original_filename = result[0]
+
+    return send_file(
+        io.BytesIO(decrypted_data),
+        as_attachment=True,
+        download_name=original_filename
     )
 
 
@@ -401,6 +445,123 @@ def profile():
         storage_mb=storage_mb
     )
 
+@app.route("/edit_profile", methods=["GET", "POST"])
+def edit_profile():
+
+    if "user_name" not in session:
+        return redirect("/login")
+
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+
+    if request.method == "POST":
+
+        new_name = request.form["name"]
+        new_email = request.form["email"]
+
+        cursor.execute(
+            """
+            UPDATE users
+            SET name=?, email=?
+            WHERE name=?
+            """,
+            (
+                new_name,
+                new_email,
+                session["user_name"]
+            )
+        )
+
+        conn.commit()
+
+        session["user_name"] = new_name
+
+        conn.close()
+    
+        return redirect("/profile")
+
+    cursor.execute(
+        "SELECT name, email FROM users WHERE name=?",
+        (session["user_name"],)
+    )
+
+    user = cursor.fetchone()
+
+    conn.close()
+
+    return render_template(
+        "edit_profile.html",
+        user=user
+    )
+
+
+
+
+@app.route("/admin_login", methods=["GET", "POST"])
+def admin_login():
+
+
+    if "admin" in session:
+        return redirect("/admin")
+
+    if request.method == "POST":
+
+        email = request.form["email"].strip()
+        password = request.form["password"]
+
+        if email == ADMIN_EMAIL and password == ADMIN_PASSWORD:
+
+            session["admin"] = True
+            session["admin_email"] = email
+
+            return redirect("/admin")
+
+        return render_template(
+            "admin_login.html",
+            error="Invalid Admin Credentials"
+        )
+
+    return render_template(
+        "admin_login.html",
+        error=None
+    )
+@app.route("/admin")
+def admin():
+
+    if "admin" not in session:
+        return redirect("/admin_login")
+
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT COUNT(*) FROM users")
+    total_users = cursor.fetchone()[0]
+
+    cursor.execute("SELECT COUNT(*) FROM files")
+    total_files = cursor.fetchone()[0]
+
+    cursor.execute("SELECT name, email FROM users")
+    users = cursor.fetchall()
+
+    cursor.execute("SELECT filename, username FROM files")
+    files = cursor.fetchall()
+
+    conn.close()
+
+    return render_template(
+        "admin.html",
+        total_users=total_users,
+        total_files=total_files,
+        users=users,
+        files=files
+    )
+
+@app.route("/admin_logout")
+def admin_logout():
+
+    session.pop("admin", None)
+
+    return redirect("/admin_login")
 
 if __name__ == "__main__":
     app.run(debug=True)

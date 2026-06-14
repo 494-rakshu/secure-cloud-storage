@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+    <title>Edit Profile | Secure Cloud Storage</title>
+
+
+<link rel="stylesheet"
+      href="{{ url_for('static', filename='style.css') }}">
+
+
+</head>
+
+<body>
+
+<nav class="navbar">
+
+
+<div class="logo">
+    SecureCloud
+</div>
+
+<div class="nav-links">
+    <a href="/dashboard">Dashboard</a>
+    <a href="/logout">Logout</a>
+</div>
+
+
+</nav>
+
+<div class="container">
+
+
+<h1>Edit Profile</h1>
+
+<div class="card">
+
+    <form method="POST">
+
+        <label>Name</label>
+        <br><br>
+
+        <input type="text"
+               name="name"
+               value="{{ user[0] }}"
+               required>
+
+        <br><br>
+
+        <label>Email</label>
+        <br><br>
+
+        <input type="email"
+               name="email"
+               value="{{ user[1] }}"
+               required>
+
+        <br><br>
+
+        <button type="submit" class="btn">
+            Update Profile
+        </button>
+
+    </form>
+
+</div>
+
+<br>
+
+<a href="/profile"
+   style="color:#64ffda;text-decoration:none;">
+    ← Back to Profile
+</a>
+
+</div>
+
+</body>
+</html>

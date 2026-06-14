@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+    <title>Admin Dashboard | Secure Cloud Storage</title>
+
+
+<link rel="stylesheet"
+      href="{{ url_for('static', filename='style.css') }}">
+
+
+</head>
+
+<body>
+
+<nav class="navbar">
+
+
+<div class="logo">
+    SecureCloud Admin
+</div>
+
+<div class="nav-links">
+    <a href="/dashboard">User Dashboard</a>
+    <a href="/admin_logout">Admin Logout</a>
+</div>
+
+
+</nav>
+
+<div class="container">
+
+
+<h1>Admin Dashboard</h1>
+
+<div class="dashboard">
+
+    <div class="card">
+        <h2>{{ total_users }}</h2>
+        <p>Total Users</p>
+    </div>
+
+    <div class="card">
+        <h2>{{ total_files }}</h2>
+        <p>Total Files</p>
+    </div>
+
+</div>
+
+<br><br>
+
+<h2 style="color:#64ffda;">Registered Users</h2>
+
+<div class="card">
+
+    <table style="width:100%;">
+
+        <tr>
+            <th>Name</th>
+            <th>Email</th>
+        </tr>
+
+        {% for user in users %}
+
+        <tr>
+            <td>{{ user[0] }}</td>
+            <td>{{ user[1] }}</td>
+        </tr>
+
+        {% endfor %}
+
+    </table>
+
+</div>
+
+<br><br>
+
+<h2 style="color:#64ffda;">Uploaded Files</h2>
+
+<div class="card">
+
+    <table style="width:100%;">
+
+        <tr>
+            <th>File Name</th>
+            <th>Owner</th>
+        </tr>
+
+        {% for file in files %}
+
+        <tr>
+            <td>{{ file[0] }}</td>
+            <td>{{ file[1] }}</td>
+        </tr>
+
+        {% endfor %}
+
+    </table>
+
+</div>
+
+
+</div>
+
+</body>
+</html>
