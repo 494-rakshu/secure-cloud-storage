@@ -18,22 +18,34 @@
 
 <div style="text-align:center; margin-top:50px;">
 
-    <h1>🔐 Login Activity</h1>
-    <p style="color:#b8c7e0;">Your recent login history</p>
+    <h1>🔐 Activity Log</h1>
+    <p style="color:#b8c7e0;">Download & system activity history</p>
 
-    <div class="card" style="max-width:600px; margin:auto; text-align:left;">
+    <div class="card" style="max-width:900px; margin:auto; text-align:left;">
 
         {% if logs %}
 
             {% for log in logs %}
-                <p style="padding:10px; border-bottom:1px solid rgba(255,255,255,0.1);">
-                    👤 {{ log[0] }} <br>
-                    🕒 {{ log[1] }}
-                </p>
+                <div style="padding:12px; border-bottom:1px solid rgba(255,255,255,0.1);">
+
+                    📁 <b>{{ log[0] }}</b> <br>
+
+                    ⚡ Action:
+                    {% if log[1] == 'DOWNLOAD' %}
+                        <span style="color:#00ff99; font-weight:bold;">{{ log[1] }}</span>
+                    {% else %}
+                        <span>{{ log[1] }}</span>
+                    {% endif %}
+
+                    <br>
+
+                    🕒 {{ log[2] }}
+
+                </div>
             {% endfor %}
 
         {% else %}
-            <p>No login history found</p>
+            <p style="padding:10px;">No activity found</p>
         {% endif %}
 
     </div>

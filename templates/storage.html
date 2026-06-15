@@ -1,33 +1,57 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Storage | Secure Cloud</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <title>Storage | Secure Cloud Storage</title>
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css') }}">
 </head>
 
 <body>
 
 <nav class="navbar">
-    <div class="logo">SecureCloud</div>
+
+    <div class="logo">
+        SecureCloud
+    </div>
+
     <div class="nav-links">
         <a href="/dashboard">Dashboard</a>
         <a href="/logout">Logout</a>
     </div>
+
 </nav>
 
-<div style="text-align:center; margin-top:50px;">
+<div class="container">
 
-    <h1>Storage Usage</h1>
+    <h1>Storage Overview</h1>
 
-    <div class="card" style="max-width:350px; margin:auto;">
+    <div class="card">
 
         <h2>Total Files</h2>
-        <p style="font-size:28px;">{{ file_count }}</p>
+        <p>{{ total_files }}</p>
 
         <h2>Storage Used</h2>
-        <p style="font-size:22px;">{{ storage_used_mb }} MB</p>
+        <p>{{ storage_mb }} MB</p>
+
+        <h2>Usage</h2>
+
+        <div style="width:100%; background:#1f2a38; border-radius:10px; overflow:hidden;">
+            <div style="width:{{ used_percent }}%;
+                background:#2ecc71;
+                padding:8px;
+                color:white;">
+               {{ used_percent | round(2) }}%
+            </div>
+        </div>
 
     </div>
+
+    <br>
+
+    <a href="/dashboard" style="color:#64ffda;text-decoration:none;">
+        ← Back to Dashboard
+    </a>
 
 </div>
 

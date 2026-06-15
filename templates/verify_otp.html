@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>OTP Verification | Secure Cloud Storage</title>
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+
+<nav class="navbar">
+
+    <div class="logo">
+        SecureCloud
+    </div>
+
+    <div class="nav-links">
+        <a href="/">Home</a>
+        <a href="/login">Login</a>
+    </div>
+
+</nav>
+
+<div class="container">
+
+    <h1>🔐 OTP Verification</h1>
+
+    <p style="
+        text-align:center;
+        color:#b8c7e0;
+        margin-bottom:25px;
+        line-height:1.6;
+    ">
+        Your login credentials have been verified successfully.
+        <br><br>
+        Enter the 6-digit OTP generated in the Flask terminal
+        to complete secure authentication.
+    </p>
+
+    <form method="POST">
+
+        <label>One-Time Password (OTP)</label>
+
+        <input
+            type="text"
+            name="otp"
+            maxlength="6"
+            placeholder="Enter 6-digit OTP"
+            required>
+
+        <button type="submit">
+            Verify & Continue
+        </button>
+
+    </form>
+
+    <div style="
+        margin-top:25px;
+        text-align:center;
+        color:#64ffda;
+        font-size:14px;
+    ">
+        Two-Factor Authentication Enabled
+    </div>
+
+</div>
+
+</body>
+</html>

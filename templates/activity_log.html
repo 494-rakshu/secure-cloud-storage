@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Activity Log</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+
+<!-- NAVBAR (same as your project style) -->
+<div class="navbar">
+    <div class="logo">SecureCloud</div>
+
+    <div class="nav-links">
+        <a href="/dashboard">Dashboard</a>
+        <a href="/files">My Files</a>
+        <a href="/logout">Logout</a>
+    </div>
+</div>
+
+<!-- MAIN CONTAINER (your glass style) -->
+<div class="container">
+
+    <h1>🔐 Activity Log</h1>
+
+    {% if logs|length == 0 %}
+        <p style="text-align:center; color:#b8c7e0;">
+            No activity found
+        </p>
+    {% endif %}
+
+    <div class="dashboard">
+
+        {% for log in logs %}
+
+        <div class="card">
+
+            <h2>
+                {{ log["action"] }}
+            </h2>
+
+            <p>{{ log["filename"] }}</p>
+
+            <p style="color:#b8c7e0; font-size:14px;">
+                {{ log["timestamp"] }}
+            </p>
+
+        </div>
+
+        {% endfor %}
+
+    </div>
+
+</div>
+
+</body>
+</html>
