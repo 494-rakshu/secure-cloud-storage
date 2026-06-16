@@ -12,6 +12,19 @@
 <div class="container">
 
     <h1>Login</h1>
+    {% if session.get('message') %}
+    <div style="
+        background:#64ffda;
+        color:#02131f;
+        padding:12px;
+        margin-bottom:20px;
+        border-radius:10px;
+        text-align:center;
+        font-weight:600;
+    ">
+       {{ session.pop('message') }}
+    </div>
+    {% endif %}
 
     <form method="POST">
 
@@ -41,11 +54,10 @@
 
     <div style="text-align:center;">
 
-        <a href="#"
-            onclick="alert('Forgot password feature is not implemented yet'); return false;"
-            style="color:#64ffda; text-decoration:none;">
-                Forgot Password?
-         </a>
+        <a href="/forgot_password"
+           style="color:#64ffda; text-decoration:none;">
+            Forgot Password?
+        </a>
 
         <br><br>
 

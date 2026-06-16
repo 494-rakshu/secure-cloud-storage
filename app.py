@@ -9,15 +9,45 @@ import datetime
 import io
 import re
 import random
+from flask_mail import Mail, Message
+from dotenv import load_dotenv
+from flask_mail import Mail, Message
+import os
+
+import random
+# other imports...
+
+# ================= HELPERS =================
+def generate_otp():
+    return str(random.randint(100000, 999999))
+
+def allowed_file(filename):
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+
 
 # ================= ADMIN =================
-ADMIN_EMAIL = "admin@securecloud.com"
-ADMIN_PASSWORD = "admin123"
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
+
+# ================= APP INIT =================
+load_dotenv()
+
+print("MAIL USER:", os.getenv("MAIL_USERNAME"))
+print("MAIL PASS:", os.getenv("MAIL_PASSWORD"))
 
 # ================= APP INIT =================
 app = Flask(__name__)
-app.secret_key = "secure_cloud_storage"
+app.secret_key = os.getenv("SECRET_KEY")
 
+# ================= MAIL CONFIG =================
+app.config["MAIL_SERVER"] = "smtp.gmail.com"
+app.config["MAIL_PORT"] = 587
+app.config["MAIL_USE_TLS"] = True
+app.config["MAIL_USERNAME"] = os.getenv("MAIL_USERNAME")
+app.config["MAIL_PASSWORD"] = os.getenv("MAIL_PASSWORD")
+app.config["MAIL_DEFAULT_SENDER"] = app.config["MAIL_USERNAME"]
+
+mail = Mail(app)
 # ================= ENCRYPTION =================
 with open("secret.key", "rb") as key_file:
     key = key_file.read()
@@ -148,6 +178,7 @@ def register():
     return render_template("register.html")
 
 # ================= LOGIN =================
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
 
@@ -178,7 +209,7 @@ def login():
 
         if user and check_password_hash(user[2], password):
 
-            # Reset failed attempts
+            # Reset login attempts
             session["login_attempts"] = 0
 
             # Generate OTP
@@ -186,19 +217,43 @@ def login():
 
             session["otp"] = otp
             session["otp_time"] = datetime.datetime.now().timestamp()
+            session["otp_attempts"] = 0
 
             session["temp_name"] = user[0]
             session["temp_email"] = user[1]
 
-            print("\n========================")
-            print("LOGIN OTP:", otp)
-            print("========================\n")
+            # ================= SEND EMAIL OTP =================
+            try:
+                msg = Message(
+                    subject="SecureCloud Login OTP",
+                    recipients=[user[1]]
+                )
+
+                msg.body = f"""
+Hello {user[0]},
+
+Your OTP for SecureCloud login is: {otp}
+
+This OTP is valid for 2 minutes.
+
+If this wasn't you, ignore this email.
+"""
+
+                mail.send(msg)
+
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+
+                return f"""
+                Email sending failed.<br><br>
+                Error: {repr(e)}
+                """
 
             return redirect("/verify_otp")
 
         # Failed login
         session["login_attempts"] += 1
-
         remaining = 5 - session["login_attempts"]
 
         return f"""
@@ -208,6 +263,87 @@ def login():
 
     return render_template("login.html")
 
+
+@app.route("/forgot_password", methods=["GET", "POST"])
+def forgot_password():
+
+    if request.method == "POST":
+
+        email = request.form["email"]
+
+        conn = sqlite3.connect("database.db")
+        cursor = conn.cursor()
+
+        cursor.execute(
+            "SELECT * FROM users WHERE email=?",
+            (email,)
+        )
+
+        user = cursor.fetchone()
+        conn.close()
+
+        if not user:
+            return "Email not registered."
+
+        otp = generate_otp()
+
+        session["reset_email"] = email
+        session["reset_otp"] = otp
+        session["reset_otp_time"] = datetime.datetime.now().timestamp()
+
+        try:
+            msg = Message(
+                subject="SecureCloud Password Reset OTP",
+                recipients=[email]
+            )
+
+            msg.body = f"""
+Your SecureCloud password reset OTP is: {otp}
+
+This OTP is valid for 2 minutes.
+"""
+
+            mail.send(msg)
+
+        except Exception as e:
+            return f"Email sending failed: {str(e)}"
+
+        return redirect("/verify_reset_otp")
+
+    return render_template("forgot_password.html")
+
+
+
+@app.route("/reset_password", methods=["GET", "POST"])
+def reset_password():
+
+    if "reset_email" not in session:
+        return redirect("/forgot_password")
+
+    if request.method == "POST":
+
+        new_password = request.form["password"]
+
+        hashed_password = generate_password_hash(new_password)
+
+        conn = sqlite3.connect("database.db")
+        cursor = conn.cursor()
+
+        cursor.execute(
+            "UPDATE users SET password=? WHERE email=?",
+            (hashed_password, session["reset_email"])
+        )
+
+        conn.commit()
+        conn.close()
+
+        session.pop("reset_email", None)
+        session.pop("reset_otp", None)
+        session.pop("reset_otp_time", None)
+
+        return redirect("/login")
+
+    return render_template("reset_password.html")
 
 @app.route("/verify_otp", methods=["GET", "POST"])
 def verify_otp():
@@ -262,11 +398,12 @@ def verify_otp():
             conn.commit()
             conn.close()
 
-            # Remove temporary OTP data
+            # Cleanup OTP session data
             session.pop("otp", None)
             session.pop("otp_time", None)
             session.pop("temp_name", None)
             session.pop("temp_email", None)
+            session.pop("otp_attempts", None)
 
             return redirect("/dashboard")
 
@@ -295,6 +432,35 @@ def verify_otp():
 
     return render_template("verify_otp.html")
 
+
+@app.route("/verify_reset_otp", methods=["GET", "POST"])
+def verify_reset_otp():
+
+    if "reset_otp" not in session:
+        return redirect("/forgot_password")
+
+    if request.method == "POST":
+
+        entered_otp = request.form["otp"]
+
+        # OTP expiry (2 minutes)
+        current_time = datetime.datetime.now().timestamp()
+
+        if current_time - session["reset_otp_time"] > 120:
+
+            session.pop("reset_otp", None)
+            session.pop("reset_otp_time", None)
+            session.pop("reset_email", None)
+
+            return "OTP Expired. Please try again."
+
+        if entered_otp == session["reset_otp"]:
+
+            return redirect("/reset_password")
+
+        return "Invalid OTP"
+
+    return render_template("verify_reset_otp.html")
 
 
 # ================= DASHBOARD =================
@@ -683,14 +849,41 @@ def delete_file(stored_name):
     if "user_name" not in session:
         return redirect("/login")
 
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+
+    # Get original filename before deleting
+    cursor.execute(
+        "SELECT filename FROM files WHERE stored_name=? AND username=?",
+        (stored_name, session["user_name"])
+    )
+
+    result = cursor.fetchone()
+
+    if not result:
+        conn.close()
+        return "File not found"
+
+    original_name = result[0]
+
+    # Delete physical file
     path = os.path.join(app.config["UPLOAD_FOLDER"], stored_name)
 
     if os.path.exists(path):
         os.remove(path)
 
-    conn = sqlite3.connect("database.db")
-    cursor = conn.cursor()
+    # Log DELETE activity
+    cursor.execute("""
+        INSERT INTO logs (username, filename, action, timestamp)
+        VALUES (?, ?, ?, ?)
+    """, (
+        session["user_name"],
+        original_name,
+        "DELETE",
+        datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    ))
 
+    # Delete database record
     cursor.execute(
         "DELETE FROM files WHERE stored_name=? AND username=?",
         (stored_name, session["user_name"])
@@ -700,7 +893,6 @@ def delete_file(stored_name):
     conn.close()
 
     return redirect("/files")
-
 # ================= LOGOUT =================
 @app.route("/logout")
 def logout():

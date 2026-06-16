@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>OTP Verification | Secure Cloud Storage</title>
+    <title>Password Reset OTP | Secure Cloud Storage</title>
 
     <link rel="stylesheet"
           href="{{ url_for('static', filename='style.css') }}">
@@ -24,7 +24,7 @@
 
 <div class="container">
 
-    <h1>🔐 OTP Verification</h1>
+    <h1>🔐 Password Reset Verification</h1>
 
     <p style="
         text-align:center;
@@ -32,16 +32,18 @@
         margin-bottom:25px;
         line-height:1.6;
     ">
-        A 6-digit verification code has been sent to your registered
+        A password reset OTP has been sent to your registered
         email address.
         <br><br>
-        Please enter the OTP below to complete secure authentication.
+        Please enter the OTP below to continue resetting
+        your password.
+        <br><br>
         The OTP is valid for 2 minutes.
     </p>
 
     <form method="POST">
 
-        <label>One-Time Password (OTP)</label>
+        <label>Reset OTP</label>
 
         <input
             type="text"
@@ -51,7 +53,7 @@
             required>
 
         <button type="submit">
-            Verify & Continue
+            Verify OTP
         </button>
 
     </form>
@@ -62,7 +64,7 @@
         color:#64ffda;
         font-size:14px;
     ">
-        Two-Factor Authentication Enabled
+        Password Recovery Verification
     </div>
 
 </div>
