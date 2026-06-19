@@ -50,74 +50,85 @@
 
 </div>
 
-<!-- Statistics Section -->
+<!-- ================= USER TOOLS (NEW) ================= -->
+<div class="user-tools">
 
-<div style="
-    display:flex;
-    justify-content:center;
-    gap:20px;
-    margin:30px;
-    flex-wrap:wrap;
-">
+    <input type="text" id="searchBox" placeholder="Search dashboard..." onkeyup="filterCards()">
 
-    <div class="card">
+    <select id="cardFilter" onchange="filterCards()">
+        <option value="">All</option>
+        <option value="profile">Profile</option>
+        <option value="upload">Upload</option>
+        <option value="files">Files</option>
+        <option value="storage">Storage</option>
+        <option value="security">Security</option>
+        <option value="activity">Activity</option>
+    </select>
+
+</div>
+
+<!-- ================= STATISTICS SECTION ================= -->
+
+<div class="dashboard stats-section">
+
+    <div class="card" data-type="stats">
         <h2>{{ total_files }}</h2>
         <p>Total Files</p>
     </div>
 
-    <div class="card">
+    <div class="card" data-type="stats">
         <h2>{{ storage_mb }} MB</h2>
         <p>Storage Used</p>
     </div>
 
-    <div class="card">
+    <div class="card" data-type="stats">
         <h2>{{ activity_count }}</h2>
         <p>Activity Logs</p>
     </div>
 
 </div>
 
-<!-- Dashboard Features -->
+<!-- ================= DASHBOARD FEATURES ================= -->
 
 <div class="dashboard">
 
     <a href="/profile" style="text-decoration:none; color:inherit;">
-        <div class="card">
+        <div class="card" data-type="profile">
             <h2>Profile</h2>
             <p>View your account details.</p>
         </div>
     </a>
 
     <a href="/upload" style="text-decoration:none; color:inherit;">
-        <div class="card">
+        <div class="card" data-type="upload">
             <h2>Upload Files</h2>
             <p>Upload documents securely.</p>
         </div>
     </a>
 
     <a href="/files" style="text-decoration:none; color:inherit;">
-        <div class="card">
+        <div class="card" data-type="files">
             <h2>My Files</h2>
             <p>View stored files.</p>
         </div>
     </a>
 
     <a href="/storage" style="text-decoration:none; color:inherit;">
-        <div class="card">
+        <div class="card" data-type="storage">
             <h2>Storage</h2>
             <p>Monitor storage usage.</p>
         </div>
     </a>
 
     <a href="/security" style="text-decoration:none; color:inherit;">
-        <div class="card">
+        <div class="card" data-type="security">
             <h2>Security Monitor</h2>
             <p>Track account activity.</p>
         </div>
     </a>
 
     <a href="/activity_log" style="text-decoration:none; color:inherit;">
-        <div class="card">
+        <div class="card" data-type="activity">
             <h2>Activity Timeline</h2>
             <p>View log history.</p>
         </div>
@@ -135,6 +146,40 @@
     {% endif %}
 
 </div>
+
+<!-- ================= TOAST ================= -->
+<div id="toast"></div>
+
+<!-- ================= SCRIPTS ================= -->
+<script>
+
+function filterCards(){
+    let search = document.getElementById("searchBox").value.toLowerCase();
+    let filter = document.getElementById("cardFilter").value.toLowerCase();
+    let cards = document.querySelectorAll(".dashboard .card");
+
+    cards.forEach(card => {
+        let text = card.innerText.toLowerCase();
+        let type = card.getAttribute("data-type") || "";
+
+        let matchSearch = text.includes(search);
+        let matchType = filter === "" || type === filter;
+
+        card.style.display = (matchSearch && matchType) ? "" : "none";
+    });
+}
+
+function showToast(msg){
+    let toast = document.getElementById("toast");
+    toast.innerText = msg;
+    toast.style.display = "block";
+
+    setTimeout(() => {
+        toast.style.display = "none";
+    }, 2500);
+}
+
+</script>
 
 </body>
 </html>

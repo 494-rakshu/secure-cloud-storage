@@ -69,3 +69,5 @@ htmlcov/
 *.tmp
 *.bak
 *.key
+add_status.py
+add_last_login.py

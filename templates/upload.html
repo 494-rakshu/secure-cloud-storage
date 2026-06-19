@@ -26,22 +26,18 @@
 
     <h1>Upload File</h1>
 
-    <form action="/upload"
-          method="POST"
-          enctype="multipart/form-data">
+    <!-- ================= AJAX UPLOAD FORM ================= -->
+    <div>
 
         <label>Select File</label>
 
-        <input
-            type="file"
-            name="file"
-            required>
+        <input type="file" id="fileInput" required>
 
-        <button type="submit">
+        <button type="button" onclick="uploadFile()">
             Upload File
         </button>
 
-    </form>
+    </div>
 
     <br>
 
@@ -55,6 +51,57 @@
     </div>
 
 </div>
+
+<!-- ================= TOAST ================= -->
+<div id="toast"></div>
+
+<!-- ================= JAVASCRIPT ================= -->
+<script>
+
+function showToast(msg){
+    let toast = document.getElementById("toast");
+    toast.innerText = msg;
+    toast.style.display = "block";
+
+    setTimeout(() => {
+        toast.style.display = "none";
+    }, 2500);
+}
+
+function uploadFile(){
+
+    let fileInput = document.getElementById("fileInput");
+    let file = fileInput.files[0];
+
+    if(!file){
+        showToast("Please select a file");
+        return;
+    }
+
+    let formData = new FormData();
+    formData.append("file", file);
+
+    fetch("/upload_ajax", {
+        method: "POST",
+        body: formData
+    })
+    .then(res => res.json())
+    .then(data => {
+
+        showToast(data.message);
+
+        if(data.status === "success"){
+            fileInput.value = "";
+        }
+
+    })
+    .catch(error => {
+        showToast("Upload failed");
+    });
+
+}
+
+</script>
 
 </body>
 </html>

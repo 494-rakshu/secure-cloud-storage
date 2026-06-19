@@ -1,104 +1,158 @@
 <!DOCTYPE html>
-
 <html>
 <head>
     <title>Admin Dashboard | Secure Cloud Storage</title>
 
-
-<link rel="stylesheet"
-      href="{{ url_for('static', filename='style.css') }}">
-
-
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css') }}">
 </head>
 
 <body>
 
 <nav class="navbar">
 
+    <div class="logo">
+        SecureCloud Admin
+    </div>
 
-<div class="logo">
-    SecureCloud Admin
-</div>
-
-<div class="nav-links">
-    <a href="/dashboard">User Dashboard</a>
-    <a href="/admin_logout">Admin Logout</a>
-</div>
-
+    <div class="nav-links">
+        <a href="/dashboard">User Dashboard</a>
+        <a href="/admin_logout">Admin Logout</a>
+    </div>
 
 </nav>
 
-<div class="container">
+<div class="container admin-container">
 
+    <h1>Admin Dashboard</h1>
 
-<h1>Admin Dashboard</h1>
+    <!-- ================= STATISTICS ================= -->
 
-<div class="dashboard">
+    <div class="dashboard">
 
-    <div class="card">
-        <h2>{{ total_users }}</h2>
-        <p>Total Users</p>
+        <div class="card">
+            <h2>{{ total_users }}</h2>
+            <p>👥 Total Users</p>
+        </div>
+
+        <div class="card">
+            <h2>{{ total_files }}</h2>
+            <p>📁 Total Files</p>
+        </div>
+
+        <div class="card">
+            <h2>{{ total_activities }}</h2>
+            <p>📜 Activities</p>
+        </div>
+
+        <div class="card">
+            <h2>{{ storage_mb }} MB</h2>
+            <p>💾 Storage Used</p>
+        </div>
+
     </div>
 
+    <br><br>
+
+    <!-- ================= USERS TABLE ================= -->
+
+    <h2 style="color:#64ffda;">Registered Users</h2>
+
     <div class="card">
-        <h2>{{ total_files }}</h2>
-        <p>Total Files</p>
+
+        <table style="width:100%;">
+
+            <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Files</th>
+                <th>Last Login</th>
+                <th>Status</th>
+                <th>Action</th>
+            </tr>
+
+            {% for user in users %}
+
+            <tr>
+                <td>{{ user[0] }}</td>
+                <td>{{ user[1] }}</td>
+                <td>{{ user[2] }}</td>
+                <td>{{ user[3] }}</td>
+
+                <!-- ================= STATUS BADGE ================= -->
+                <td>
+                    {% if user[4] == 'Blocked' %}
+                        <span class="badge blocked">Blocked</span>
+                    {% else %}
+                        <span class="badge active">Active</span>
+                    {% endif %}
+                </td>
+
+                <!-- ================= ACTION BUTTON ================= -->
+                <td style="display:flex; gap:8px; flex-wrap:wrap;">
+                    {% if user[4] == 'Blocked' %}
+                        <a href="/unblock_user/{{ user[1] }}" class="btn unblock">
+                            Unblock
+                        </a>
+                    {% else %}
+                        <a href="/block_user/{{ user[1] }}" class="btn block">
+                            Block
+                        </a>
+                    {% endif %}
+                        <a href="/delete_user/{{ user[1] }}"
+                            class="btn delete"
+                            onclick="return confirm('Are you sure you want to delete this user?')">
+                            Delete
+                         </a>
+
+                </td>
+                 
+
+            </tr>
+
+            {% endfor %}
+
+        </table>
+
     </div>
 
-</div>
+    <br><br>
 
-<br><br>
+    <!-- ================= RECENT ACTIVITY ================= -->
 
-<h2 style="color:#64ffda;">Registered Users</h2>
+    <h2 style="color:#64ffda;">Recent Activity</h2>
 
-<div class="card">
+    <div class="card">
 
-    <table style="width:100%;">
+        {% if recent_logs %}
 
-        <tr>
-            <th>Name</th>
-            <th>Email</th>
-        </tr>
+        <table style="width:100%;">
 
-        {% for user in users %}
+            <tr>
+                <th>User</th>
+                <th>Action</th>
+                <th>File</th>
+                <th>Time</th>
+            </tr>
 
-        <tr>
-            <td>{{ user[0] }}</td>
-            <td>{{ user[1] }}</td>
-        </tr>
+            {% for log in recent_logs %}
 
-        {% endfor %}
+            <tr>
+                <td>{{ log[0] }}</td>
+                <td>{{ log[1] }}</td>
+                <td>{{ log[2] }}</td>
+                <td>{{ log[3] }}</td>
+            </tr>
 
-    </table>
+            {% endfor %}
 
-</div>
+        </table>
 
-<br><br>
+        {% else %}
+            <p>No recent activities found.</p>
+        {% endif %}
 
-<h2 style="color:#64ffda;">Uploaded Files</h2>
-
-<div class="card">
-
-    <table style="width:100%;">
-
-        <tr>
-            <th>File Name</th>
-            <th>Owner</th>
-        </tr>
-
-        {% for file in files %}
-
-        <tr>
-            <td>{{ file[0] }}</td>
-            <td>{{ file[1] }}</td>
-        </tr>
-
-        {% endfor %}
-
-    </table>
-
-</div>
-
+    </div>
 
 </div>
 

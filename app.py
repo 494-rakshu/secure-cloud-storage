@@ -24,16 +24,11 @@ def generate_otp():
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
+load_dotenv()
 
 # ================= ADMIN =================
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
-
-# ================= APP INIT =================
-load_dotenv()
-
-print("MAIL USER:", os.getenv("MAIL_USERNAME"))
-print("MAIL PASS:", os.getenv("MAIL_PASSWORD"))
 
 # ================= APP INIT =================
 app = Flask(__name__)
@@ -196,16 +191,33 @@ def login():
         email = request.form["email"]
         password = request.form["password"]
 
+        # ================= ADMIN LOGIN =================
+
+        if email == ADMIN_EMAIL and password == ADMIN_PASSWORD:
+
+            session["admin"] = True
+            session["user_name"] = "Admin"
+            session["email"] = ADMIN_EMAIL
+
+            session["login_attempts"] = 0
+
+            return redirect("/admin")
+
+        # ================= NORMAL USER LOGIN =================
+
         conn = sqlite3.connect("database.db")
         cursor = conn.cursor()
 
         cursor.execute(
-            "SELECT name, email, password FROM users WHERE email=?",
+            "SELECT name, email, password , status FROM users WHERE email=?",
             (email,)
         )
 
         user = cursor.fetchone()
         conn.close()
+
+        if user and user[3] == "Blocked":
+            return render_template("blocked.html")
 
         if user and check_password_hash(user[2], password):
 
@@ -223,6 +235,7 @@ def login():
             session["temp_email"] = user[1]
 
             # ================= SEND EMAIL OTP =================
+
             try:
                 msg = Message(
                     subject="SecureCloud Login OTP",
@@ -236,7 +249,10 @@ Your OTP for SecureCloud login is: {otp}
 
 This OTP is valid for 2 minutes.
 
-If this wasn't you, ignore this email.
+If this wasn't you, please ignore this email.
+
+Regards,
+SecureCloud Team
 """
 
                 mail.send(msg)
@@ -252,7 +268,8 @@ If this wasn't you, ignore this email.
 
             return redirect("/verify_otp")
 
-        # Failed login
+        # ================= FAILED LOGIN =================
+
         session["login_attempts"] += 1
         remaining = 5 - session["login_attempts"]
 
@@ -375,7 +392,7 @@ def verify_otp():
 
             session["user_name"] = session["temp_name"]
             session["email"] = session["temp_email"]
-
+            
             # Reset counters
             session["login_attempts"] = 0
             session["otp_attempts"] = 0
@@ -383,6 +400,15 @@ def verify_otp():
             # Log login activity
             conn = sqlite3.connect("database.db")
             cursor = conn.cursor()
+            
+            cursor.execute("""
+                 UPDATE users
+                SET last_login=?
+                WHERE email=?
+            """, (
+               datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+               session["email"]
+            ))
 
             cursor.execute("""
                 INSERT INTO logs
@@ -639,6 +665,35 @@ def upload_file():
         return "Invalid file type"
 
     return render_template("upload.html")
+
+
+@app.route("/upload_ajax", methods=["POST"])
+def upload_ajax():
+
+    file = request.files["file"]
+    user = session.get("user_name")
+
+    if file:
+
+        filename = secure_filename(file.filename)
+        path = os.path.join("uploads", filename)
+        file.save(path)
+
+        conn = sqlite3.connect("database.db")
+        cur = conn.cursor()
+
+        cur.execute(
+            "INSERT INTO files (user, filename) VALUES (?, ?)",
+            (user, filename)
+        )
+
+        conn.commit()
+        conn.close()
+
+        return jsonify({"status": "success", "message": "File uploaded successfully"})
+
+    return jsonify({"status": "error", "message": "No file selected"})
+
 # ================= FILES =================
 @app.route("/files")
 def files():
@@ -926,27 +981,139 @@ def admin():
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
 
+    # ================= STATISTICS =================
+
     cursor.execute("SELECT COUNT(*) FROM users")
-    users = cursor.fetchone()[0]
+    total_users = cursor.fetchone()[0]
 
     cursor.execute("SELECT COUNT(*) FROM files")
-    files = cursor.fetchone()[0]
+    total_files = cursor.fetchone()[0]
 
-    cursor.execute("SELECT name, email FROM users")
-    user_list = cursor.fetchall()
+    cursor.execute("SELECT COUNT(*) FROM logs")
+    total_activities = cursor.fetchone()[0]
 
-    cursor.execute("SELECT filename, username FROM files")
-    file_list = cursor.fetchall()
+    # Calculate total storage used
+    total_storage = 0
+
+    cursor.execute("SELECT stored_name FROM files")
+    stored_files = cursor.fetchall()
+
+    for file in stored_files:
+        path = os.path.join(app.config["UPLOAD_FOLDER"], file[0])
+
+        if os.path.exists(path):
+            total_storage += os.path.getsize(path)
+
+    storage_mb = round(total_storage / (1024 * 1024), 2)
+
+    # ================= USER TABLE =================
+
+    cursor.execute("""
+        SELECT name,
+               email,
+               COALESCE(last_login, 'Never'),
+               status
+        FROM users
+    """)
+
+    users_raw = cursor.fetchall()
+
+    enhanced_users = []
+
+    for user in users_raw:
+
+        name = user[0]
+        email = user[1]
+        last_login = user[2]
+        status=user[3]
+
+        cursor.execute(
+            "SELECT COUNT(*) FROM files WHERE username=?",
+            (name,)
+        )
+
+        file_count = cursor.fetchone()[0]
+
+        enhanced_users.append(
+            (name, email, file_count, last_login, status)
+        )
+
+    # ================= RECENT ACTIVITIES =================
+
+    cursor.execute("""
+        SELECT username,
+               action,
+               filename,
+               timestamp
+        FROM logs
+        ORDER BY timestamp DESC
+        LIMIT 10
+    """)
+
+    recent_logs = cursor.fetchall()
 
     conn.close()
 
     return render_template(
         "admin.html",
-        total_users=users,
-        total_files=files,
-        users=user_list,
-        files=file_list
+        total_users=total_users,
+        total_files=total_files,
+        total_activities=total_activities,
+        storage_mb=storage_mb,
+        users=enhanced_users,
+        recent_logs=recent_logs
     )
+
+
+@app.route("/admin_logout")
+def admin_logout():
+
+    session.clear()
+
+    return redirect("/admin_login")
+
+
+@app.route('/block_user/<email>')
+def block_user(email):
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "UPDATE users SET status='Blocked' WHERE email=?",
+        (email,)
+    )
+
+    conn.commit()
+    conn.close()
+
+    return redirect('/admin')
+
+
+@app.route('/unblock_user/<email>')
+def unblock_user(email):
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "UPDATE users SET status='Active' WHERE email=?",
+        (email,)
+    )
+
+    conn.commit()
+    conn.close()
+
+    return redirect('/admin')
+
+@app.route("/delete_user/<email>")
+def delete_user(email):
+    conn = sqlite3.connect("database.db")
+    cur = conn.cursor()
+
+    cur.execute("DELETE FROM users WHERE email=?", (email,))
+    conn.commit()
+    conn.close()
+
+    return redirect("/admin")
 
 @app.route("/activity_log")
 def activity_log():
