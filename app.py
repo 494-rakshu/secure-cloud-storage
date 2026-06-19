@@ -13,7 +13,7 @@ from flask_mail import Mail, Message
 from dotenv import load_dotenv
 from flask_mail import Mail, Message
 import os
-
+from flask import jsonify
 import random
 # other imports...
 
@@ -412,12 +412,13 @@ def verify_otp():
 
             cursor.execute("""
                 INSERT INTO logs
-                (username, filename, action, timestamp)
-                VALUES (?, ?, ?, ?)
+                (username, email, filename, action, timestamp)
+                VALUES (?, ?, ?, ?, ?)
             """, (
-                session["user_name"],
-                "LOGIN",
-                "LOGIN",
+               session["user_name"],
+               session["email"],
+               "LOGIN",
+               "LOGIN",
                 datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             ))
 
@@ -645,15 +646,15 @@ def upload_file():
             # Activity log
             cursor.execute("""
                 INSERT INTO logs
-                (username, action, filename, timestamp)
-                VALUES (?, ?, ?, ?)
+                (username, email, action, filename, timestamp)
+                VALUES (?, ?, ?, ?, ?)
             """, (
-                session["user_name"],
-                "UPLOAD",
-                original_name,
-                upload_date
+               session["user_name"],
+               session["email"],
+               "UPLOAD",
+               original_name,
+               upload_date
             ))
-
             conn.commit()
             conn.close()
 
@@ -673,27 +674,41 @@ def upload_ajax():
     file = request.files["file"]
     user = session.get("user_name")
 
-    if file:
+    if not file:
+        return jsonify({"status": "error", "message": "No file selected"})
 
-        filename = secure_filename(file.filename)
-        path = os.path.join("uploads", filename)
-        file.save(path)
+    if not user:
+        return jsonify({"status": "error", "message": "Unauthorized"})
 
-        conn = sqlite3.connect("database.db")
-        cur = conn.cursor()
+    filename = secure_filename(file.filename)
 
-        cur.execute(
-            "INSERT INTO files (user, filename) VALUES (?, ?)",
-            (user, filename)
-        )
+    unique_name = str(uuid.uuid4()) + "_" + filename
+    path = os.path.join(app.config["UPLOAD_FOLDER"], unique_name)
 
-        conn.commit()
-        conn.close()
+    # Encrypt the file
+    encrypted_data = fernet.encrypt(file.read())
 
-        return jsonify({"status": "success", "message": "File uploaded successfully"})
+    with open(path, "wb") as f:
+        f.write(encrypted_data)
+  
+    
+    conn = sqlite3.connect("database.db")
+    cur = conn.cursor()
 
-    return jsonify({"status": "error", "message": "No file selected"})
+    cur.execute("""
+        INSERT INTO files (filename, stored_name, username, upload_date)
+        VALUES (?, ?, ?, ?)
+    """, (
+        filename,
+        unique_name,
+        user,
+        datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    ))
 
+    conn.commit()
+    conn.close()
+
+    return jsonify({"status": "success", "message": "File uploaded successfully"})
 # ================= FILES =================
 @app.route("/files")
 def files():
@@ -871,10 +886,11 @@ def download_file(stored_name):
     original_name = result[0]
 
     cursor.execute("""
-        INSERT INTO logs (username, filename, action, timestamp)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO logs (username, email, filename, action, timestamp)
+        VALUES (?, ?, ?, ?, ?)
     """, (
         session["user_name"],
+        session["email"],
         original_name,
         "DOWNLOAD",
         datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -1042,9 +1058,10 @@ def admin():
 
     cursor.execute("""
         SELECT username,
-               action,
-               filename,
-               timestamp
+            email,
+            action,
+            filename,
+            timestamp
         FROM logs
         ORDER BY timestamp DESC
         LIMIT 10
