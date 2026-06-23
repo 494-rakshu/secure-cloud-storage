@@ -574,22 +574,21 @@ h2{
 /* ================= FIX BUTTON THEME RESET ================= */
 
 button{
-    font-family: inherit;
+    width:100%;
+    margin-top:25px;
+    padding:12px;
+    border:none;
+    border-radius:10px;
+    background:#64ffda;
+    color:#02131f;
+    font-size:16px;
+    font-weight:600;
+    cursor:pointer;
+    transition:0.3s;
 }
 
-/* prevent default browser styling */
-button{
-    background: transparent;
-    border: none;
-    cursor: pointer;
-}
-
-/* re-apply your theme button styles */
-.btn, button{
-    padding: 6px 12px;
-    border-radius: 8px;
-    font-size: 12px;
-    transition: 0.2s;
+button:hover{
+    box-shadow:0 0 15px rgba(100,255,218,0.5);
 }
 
 .user-tools{
