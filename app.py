@@ -44,11 +44,12 @@ app.config["MAIL_DEFAULT_SENDER"] = app.config["MAIL_USERNAME"]
 
 mail = Mail(app)
 # ================= ENCRYPTION =================
-with open("secret.key", "rb") as key_file:
-    key = key_file.read()
+FERNET_KEY = os.getenv("FERNET_KEY")
 
-fernet = Fernet(key)
+if not FERNET_KEY:
+    raise ValueError("FERNET_KEY environment variable not set")
 
+fernet = Fernet(FERNET_KEY.encode())
 # ================= CONFIG =================
 UPLOAD_FOLDER = "uploads"
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
