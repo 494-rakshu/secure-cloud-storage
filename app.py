@@ -64,8 +64,14 @@ ALLOWED_EXTENSIONS = {
 }
 
 # ================= DATABASE INIT =================
+import sqlite3
+import os
+
 def init_db():
-    conn = sqlite3.connect("database.db")
+    # ensure instance folder exists (important for Render)
+    os.makedirs("instance", exist_ok=True)
+
+    conn = sqlite3.connect("instance/database.db")
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -100,7 +106,10 @@ def init_db():
     conn.commit()
     conn.close()
 
-init_db()
+
+if __name__ == "__main__":
+    init_db()
+    # app.run(...) keep your existing app run line here
 
 # ================= HELPERS =================
 def allowed_file(filename):
@@ -144,7 +153,7 @@ def register():
         if not re.search(r"[@$!%*?&]", password):
             return "Password must contain a special character"
 
-        conn = sqlite3.connect("database.db")
+        conn = sqlite3.connect("instance/database.db")
         cursor = conn.cursor()
 
         # Check duplicate email
@@ -178,10 +187,16 @@ def register():
 @app.route("/login", methods=["GET", "POST"])
 def login():
 
+    print("LOGIN ROUTE HIT")
+
     if "login_attempts" not in session:
         session["login_attempts"] = 0
 
+
     if request.method == "POST":
+
+        if session.get("otp_lock"):
+            return redirect("/verify_otp")
 
         if session["login_attempts"] >= 5:
             return """
@@ -206,7 +221,7 @@ def login():
 
         # ================= NORMAL USER LOGIN =================
 
-        conn = sqlite3.connect("database.db")
+        conn = sqlite3.connect("instance/database.db")
         cursor = conn.cursor()
 
         cursor.execute(
@@ -221,7 +236,7 @@ def login():
             return render_template("blocked.html")
 
         if user and check_password_hash(user[2], password):
-
+            print("GENERATING OTP")
             # Reset login attempts
             session["login_attempts"] = 0
 
@@ -234,6 +249,9 @@ def login():
 
             session["temp_name"] = user[0]
             session["temp_email"] = user[1]
+            session["otp_lock"] = True
+
+            session["otp_sent_flag"] = True
 
             # ================= SEND EMAIL OTP =================
 
@@ -289,7 +307,7 @@ def forgot_password():
 
         email = request.form["email"]
 
-        conn = sqlite3.connect("database.db")
+        conn = sqlite3.connect("instance/database.db")
         cursor = conn.cursor()
 
         cursor.execute(
@@ -344,7 +362,7 @@ def reset_password():
 
         hashed_password = generate_password_hash(new_password)
 
-        conn = sqlite3.connect("database.db")
+        conn = sqlite3.connect("instance/database.db")
         cursor = conn.cursor()
 
         cursor.execute(
@@ -379,11 +397,13 @@ def verify_otp():
 
         if current_time - session["otp_time"] > 120:
 
+            # Cleanup OTP session data
             session.pop("otp", None)
             session.pop("otp_time", None)
             session.pop("temp_name", None)
             session.pop("temp_email", None)
             session.pop("otp_attempts", None)
+            session.pop("otp_lock", None)
 
             return "OTP Expired. Please login again."
 
@@ -393,33 +413,26 @@ def verify_otp():
 
             session["user_name"] = session["temp_name"]
             session["email"] = session["temp_email"]
-            
+
             # Reset counters
             session["login_attempts"] = 0
             session["otp_attempts"] = 0
 
+            # Remove OTP lock
+            session.pop("otp_lock", None)
+
             # Log login activity
-            conn = sqlite3.connect("database.db")
+            conn = sqlite3.connect("instance/database.db")
             cursor = conn.cursor()
-            
-            cursor.execute("""
-                 UPDATE users
-                SET last_login=?
-                WHERE email=?
-            """, (
-               datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-               session["email"]
-            ))
 
             cursor.execute("""
                 INSERT INTO logs
-                (username, email, filename, action, timestamp)
-                VALUES (?, ?, ?, ?, ?)
+                (username, filename, action, timestamp)
+                VALUES (?, ?, ?, ?)
             """, (
-               session["user_name"],
-               session["email"],
-               "LOGIN",
-               "LOGIN",
+                session["user_name"],
+                "LOGIN",
+                "LOGIN",
                 datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             ))
 
@@ -432,7 +445,8 @@ def verify_otp():
             session.pop("temp_name", None)
             session.pop("temp_email", None)
             session.pop("otp_attempts", None)
-
+            session.pop("otp_lock", None)
+            
             return redirect("/dashboard")
 
         # Wrong OTP
@@ -445,6 +459,7 @@ def verify_otp():
             session.pop("temp_name", None)
             session.pop("temp_email", None)
             session.pop("otp_attempts", None)
+            session.pop("otp_lock", None)
 
             return """
             Too many incorrect OTP attempts.
@@ -459,7 +474,6 @@ def verify_otp():
         """
 
     return render_template("verify_otp.html")
-
 
 @app.route("/verify_reset_otp", methods=["GET", "POST"])
 def verify_reset_otp():
@@ -498,7 +512,7 @@ def dashboard():
     if "user_name" not in session:
         return redirect("/login")
 
-    conn = sqlite3.connect("database.db")
+    conn = sqlite3.connect("instance/database.db")
     cursor = conn.cursor()
 
     # ----------------------------
@@ -599,7 +613,7 @@ def upload_file():
 
             original_name = secure_filename(file.filename)
 
-            conn = sqlite3.connect("database.db")
+            conn = sqlite3.connect("instance/database.db")
             cursor = conn.cursor()
 
             # Check duplicate file
@@ -693,7 +707,7 @@ def upload_ajax():
         f.write(encrypted_data)
   
     
-    conn = sqlite3.connect("database.db")
+    conn = sqlite3.connect("instance/database.db")
     cur = conn.cursor()
 
     cur.execute("""
@@ -719,7 +733,7 @@ def files():
 
     search = request.args.get("search", "")
 
-    conn = sqlite3.connect("database.db")
+    conn = sqlite3.connect("instance/database.db")
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -741,7 +755,7 @@ def profile():
     if "user_name" not in session:
         return redirect("/login")
 
-    conn = sqlite3.connect("database.db")
+    conn = sqlite3.connect("instance/database.db")
     cursor = conn.cursor()
 
     cursor.execute("SELECT name, email FROM users WHERE email=?", (session["email"],))
@@ -776,7 +790,7 @@ def edit_profile():
     if "user_name" not in session:
         return redirect("/login")
 
-    conn = sqlite3.connect("database.db")
+    conn = sqlite3.connect("instance/database.db")
     cursor = conn.cursor()
 
     cursor.execute("SELECT name, email FROM users WHERE email=?", (session["email"],))
@@ -808,7 +822,7 @@ def storage():
     if "user_name" not in session:
         return redirect("/login")
 
-    conn = sqlite3.connect("database.db")
+    conn = sqlite3.connect("instance/database.db")
     cursor = conn.cursor()
 
     # total files
@@ -848,7 +862,7 @@ def security():
     if "user_name" not in session:
         return redirect("/login")
 
-    conn = sqlite3.connect("database.db")
+    conn = sqlite3.connect("instance/database.db")
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -870,7 +884,7 @@ def download_file(stored_name):
     if "user_name" not in session:
         return redirect("/login")
 
-    conn = sqlite3.connect("database.db")
+    conn = sqlite3.connect("instance/database.db")
     cursor = conn.cursor()
 
     cursor.execute(
@@ -921,7 +935,7 @@ def delete_file(stored_name):
     if "user_name" not in session:
         return redirect("/login")
 
-    conn = sqlite3.connect("database.db")
+    conn = sqlite3.connect("instance/database.db")
     cursor = conn.cursor()
 
     # Get original filename before deleting
@@ -995,7 +1009,7 @@ def admin():
     if "admin" not in session:
         return redirect("/admin_login")
 
-    conn = sqlite3.connect("database.db")
+    conn = sqlite3.connect("instance/database.db")
     cursor = conn.cursor()
 
     # ================= STATISTICS =================
@@ -1093,7 +1107,7 @@ def admin_logout():
 
 @app.route('/block_user/<email>')
 def block_user(email):
-    conn = sqlite3.connect("database.db")
+    conn = sqlite3.connect("instance/database.db")
     cursor = conn.cursor()
 
     cursor.execute(
@@ -1109,7 +1123,7 @@ def block_user(email):
 
 @app.route('/unblock_user/<email>')
 def unblock_user(email):
-    conn = sqlite3.connect("database.db")
+    conn = sqlite3.connect("instance/database.db")
     cursor = conn.cursor()
 
     cursor.execute(
@@ -1124,7 +1138,7 @@ def unblock_user(email):
 
 @app.route("/delete_user/<email>")
 def delete_user(email):
-    conn = sqlite3.connect("database.db")
+    conn = sqlite3.connect("instance/database.db")
     cur = conn.cursor()
 
     cur.execute("DELETE FROM users WHERE email=?", (email,))
@@ -1138,7 +1152,7 @@ def activity_log():
     if "user_name" not in session:
         return redirect("/login")
 
-    conn = sqlite3.connect("database.db")
+    conn = sqlite3.connect("instance/database.db")
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
 
@@ -1156,4 +1170,4 @@ def activity_log():
 
 # ================= RUN =================
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=False)
