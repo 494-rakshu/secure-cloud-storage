@@ -34,7 +34,7 @@ ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY")
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-DB_PATH = os.path.join(os.getcwd(), "database.db")
+DB_PATH = os.path.join(os.getcwd(), "instance","database.db")
 
 # ================= MAIL CONFIG =================
 app.config["MAIL_SERVER"] = "smtp.gmail.com"
@@ -67,15 +67,14 @@ ALLOWED_EXTENSIONS = {
 
 # ================= DATABASE INIT =================
 def init_db():
+    os.makedirs("instance", exist_ok=True)
 
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
-# create tables safely on first run
-
-
+    # USERS TABLE
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS users (
+    CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT,
         email TEXT UNIQUE,
@@ -85,10 +84,23 @@ def init_db():
     )
     """)
 
+    # FILES TABLE (VERY IMPORTANT - you were missing it in logs)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS files (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        filename TEXT,
+        stored_name TEXT,
+        username TEXT,
+        upload_date TEXT
+    )
+    """)
+
+    # LOGS TABLE
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT,
+        email TEXT,
         filename TEXT,
         action TEXT,
         timestamp TEXT
@@ -1193,7 +1205,11 @@ def activity_log():
 
 # ================= RUN =================
 if __name__ == "__main__":
+
+    print("INITIALIZING DATABASE...")
     with app.app_context():
         init_db()
         migrate_db()
+    print("DATABASE READY")
+
     app.run(debug=False)
