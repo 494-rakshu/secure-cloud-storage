@@ -33,6 +33,8 @@ ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
 # ================= APP INIT =================
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY")
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+DB_PATH = os.path.join(BASE_DIR, "instance", "database.db")
 
 # ================= MAIL CONFIG =================
 app.config["MAIL_SERVER"] = "smtp.gmail.com"
@@ -71,25 +73,18 @@ def init_db():
     # ensure instance folder exists (important for Render)
     os.makedirs("instance", exist_ok=True)
 
-    conn = sqlite3.connect("instance/database.db")
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
+
     cursor.execute("""
-    CREATE TABLE IF NOT EXISTS users (
+        CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT,
         email TEXT UNIQUE,
-        password TEXT
-    )
-    """)
-
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS files (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        filename TEXT,
-        stored_name TEXT,
-        username TEXT,
-        upload_date TEXT
+        password TEXT,
+        status TEXT DEFAULT 'Active',
+        last_login TEXT
     )
     """)
 
@@ -102,6 +97,25 @@ def init_db():
         timestamp TEXT
     )
     """)
+
+    conn.commit()
+    conn.close()
+
+def migrate_db():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    # Check existing columns in users table
+    cursor.execute("PRAGMA table_info(users)")
+    columns = [col[1] for col in cursor.fetchall()]
+
+    # Add status column if missing
+    if "status" not in columns:
+        cursor.execute("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'Active'")
+
+    # Add last_login column if missing
+    if "last_login" not in columns:
+        cursor.execute("ALTER TABLE users ADD COLUMN last_login TEXT")
 
     conn.commit()
     conn.close()
@@ -192,7 +206,6 @@ def login():
     if "login_attempts" not in session:
         session["login_attempts"] = 0
 
-
     if request.method == "POST":
 
         if session.get("otp_lock"):
@@ -208,37 +221,56 @@ def login():
         password = request.form["password"]
 
         # ================= ADMIN LOGIN =================
-
         if email == ADMIN_EMAIL and password == ADMIN_PASSWORD:
 
             session["admin"] = True
             session["user_name"] = "Admin"
             session["email"] = ADMIN_EMAIL
-
             session["login_attempts"] = 0
 
             return redirect("/admin")
 
         # ================= NORMAL USER LOGIN =================
-
-        conn = sqlite3.connect("instance/database.db")
+        conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
 
-        cursor.execute(
-            "SELECT name, email, password , status FROM users WHERE email=?",
-            (email,)
-        )
+        cursor.execute("""
+            SELECT name, email, password, status 
+            FROM users 
+            WHERE email=?
+        """, (email,))
 
         user = cursor.fetchone()
-        conn.close()
 
-        if user and user[3] == "Blocked":
+        if not user:
+            conn.close()
+            session["login_attempts"] += 1
+            remaining = 5 - session["login_attempts"]
+            return f"Invalid Email or Password.<br><br>Attempts Remaining: {remaining}"
+
+        # Blocked user check
+        if user[3] == "Blocked":
+            conn.close()
             return render_template("blocked.html")
 
-        if user and check_password_hash(user[2], password):
+        # Password check
+        if check_password_hash(user[2], password):
+
             print("GENERATING OTP")
+
             # Reset login attempts
             session["login_attempts"] = 0
+
+            # 🔥 UPDATE LAST LOGIN HERE
+            cursor.execute("""
+                UPDATE users 
+                SET last_login=? 
+                WHERE email=?
+            """, (
+                datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                email
+            ))
+            conn.commit()
 
             # Generate OTP
             otp = str(random.randint(100000, 999999))
@@ -251,10 +283,7 @@ def login():
             session["temp_email"] = user[1]
             session["otp_lock"] = True
 
-            session["otp_sent_flag"] = True
-
             # ================= SEND EMAIL OTP =================
-
             try:
                 msg = Message(
                     subject="SecureCloud Login OTP",
@@ -277,17 +306,14 @@ SecureCloud Team
                 mail.send(msg)
 
             except Exception as e:
-                import traceback
-                traceback.print_exc()
+                conn.close()
+                return f"Email sending failed: {repr(e)}"
 
-                return f"""
-                Email sending failed.<br><br>
-                Error: {repr(e)}
-                """
-
+            conn.close()
             return redirect("/verify_otp")
 
         # ================= FAILED LOGIN =================
+        conn.close()
 
         session["login_attempts"] += 1
         remaining = 5 - session["login_attempts"]
@@ -307,7 +333,7 @@ def forgot_password():
 
         email = request.form["email"]
 
-        conn = sqlite3.connect("instance/database.db")
+        conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
 
         cursor.execute(
@@ -362,7 +388,7 @@ def reset_password():
 
         hashed_password = generate_password_hash(new_password)
 
-        conn = sqlite3.connect("instance/database.db")
+        conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
 
         cursor.execute(
@@ -422,7 +448,7 @@ def verify_otp():
             session.pop("otp_lock", None)
 
             # Log login activity
-            conn = sqlite3.connect("instance/database.db")
+            conn = sqlite3.connect(DB_PATH)
             cursor = conn.cursor()
 
             cursor.execute("""
@@ -512,7 +538,7 @@ def dashboard():
     if "user_name" not in session:
         return redirect("/login")
 
-    conn = sqlite3.connect("instance/database.db")
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
     # ----------------------------
@@ -613,7 +639,7 @@ def upload_file():
 
             original_name = secure_filename(file.filename)
 
-            conn = sqlite3.connect("instance/database.db")
+            conn = sqlite3.connect(DB_PATH)
             cursor = conn.cursor()
 
             # Check duplicate file
@@ -707,7 +733,7 @@ def upload_ajax():
         f.write(encrypted_data)
   
     
-    conn = sqlite3.connect("instance/database.db")
+    conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
 
     cur.execute("""
@@ -733,7 +759,7 @@ def files():
 
     search = request.args.get("search", "")
 
-    conn = sqlite3.connect("instance/database.db")
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -755,7 +781,7 @@ def profile():
     if "user_name" not in session:
         return redirect("/login")
 
-    conn = sqlite3.connect("instance/database.db")
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
     cursor.execute("SELECT name, email FROM users WHERE email=?", (session["email"],))
@@ -790,7 +816,7 @@ def edit_profile():
     if "user_name" not in session:
         return redirect("/login")
 
-    conn = sqlite3.connect("instance/database.db")
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
     cursor.execute("SELECT name, email FROM users WHERE email=?", (session["email"],))
@@ -822,7 +848,7 @@ def storage():
     if "user_name" not in session:
         return redirect("/login")
 
-    conn = sqlite3.connect("instance/database.db")
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
     # total files
@@ -862,7 +888,7 @@ def security():
     if "user_name" not in session:
         return redirect("/login")
 
-    conn = sqlite3.connect("instance/database.db")
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -884,7 +910,7 @@ def download_file(stored_name):
     if "user_name" not in session:
         return redirect("/login")
 
-    conn = sqlite3.connect("instance/database.db")
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
     cursor.execute(
@@ -935,7 +961,7 @@ def delete_file(stored_name):
     if "user_name" not in session:
         return redirect("/login")
 
-    conn = sqlite3.connect("instance/database.db")
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
     # Get original filename before deleting
@@ -1009,7 +1035,7 @@ def admin():
     if "admin" not in session:
         return redirect("/admin_login")
 
-    conn = sqlite3.connect("instance/database.db")
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
     # ================= STATISTICS =================
@@ -1107,7 +1133,7 @@ def admin_logout():
 
 @app.route('/block_user/<email>')
 def block_user(email):
-    conn = sqlite3.connect("instance/database.db")
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
     cursor.execute(
@@ -1123,7 +1149,7 @@ def block_user(email):
 
 @app.route('/unblock_user/<email>')
 def unblock_user(email):
-    conn = sqlite3.connect("instance/database.db")
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
     cursor.execute(
@@ -1138,7 +1164,7 @@ def unblock_user(email):
 
 @app.route("/delete_user/<email>")
 def delete_user(email):
-    conn = sqlite3.connect("instance/database.db")
+    conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
 
     cur.execute("DELETE FROM users WHERE email=?", (email,))
@@ -1152,7 +1178,7 @@ def activity_log():
     if "user_name" not in session:
         return redirect("/login")
 
-    conn = sqlite3.connect("instance/database.db")
+    conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
 
@@ -1170,4 +1196,7 @@ def activity_log():
 
 # ================= RUN =================
 if __name__ == "__main__":
+    with app.app_context():
+        init_db()
+        migrate_db()
     app.run(debug=False)
