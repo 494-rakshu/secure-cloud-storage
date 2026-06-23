@@ -34,7 +34,7 @@ ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY")
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-DB_PATH = os.path.join(BASE_DIR, "instance", "database.db")
+DB_PATH = os.path.join(os.getcwd(), "database.db")
 
 # ================= MAIL CONFIG =================
 app.config["MAIL_SERVER"] = "smtp.gmail.com"
@@ -66,15 +66,12 @@ ALLOWED_EXTENSIONS = {
 }
 
 # ================= DATABASE INIT =================
-import sqlite3
-import os
-
 def init_db():
-    # ensure instance folder exists (important for Render)
-    os.makedirs("instance", exist_ok=True)
 
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
+
+# create tables safely on first run
 
 
     cursor.execute("""
@@ -167,7 +164,7 @@ def register():
         if not re.search(r"[@$!%*?&]", password):
             return "Password must contain a special character"
 
-        conn = sqlite3.connect("instance/database.db")
+        conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
 
         # Check duplicate email
@@ -248,20 +245,19 @@ def login():
             remaining = 5 - session["login_attempts"]
             return f"Invalid Email or Password.<br><br>Attempts Remaining: {remaining}"
 
-        # Blocked user check
+        # ================= BLOCKED USER =================
         if user[3] == "Blocked":
             conn.close()
             return render_template("blocked.html")
 
-        # Password check
+        # ================= PASSWORD CHECK =================
         if check_password_hash(user[2], password):
 
             print("GENERATING OTP")
 
-            # Reset login attempts
             session["login_attempts"] = 0
 
-            # 🔥 UPDATE LAST LOGIN HERE
+            # ================= UPDATE LAST LOGIN =================
             cursor.execute("""
                 UPDATE users 
                 SET last_login=? 
@@ -270,9 +266,10 @@ def login():
                 datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 email
             ))
+
             conn.commit()
 
-            # Generate OTP
+            # ================= GENERATE OTP =================
             otp = str(random.randint(100000, 999999))
 
             session["otp"] = otp
