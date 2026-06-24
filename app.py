@@ -1,7 +1,10 @@
-from flask import Flask, render_template, request, redirect, session, send_file, flash
+from flask import Flask, render_template, request, redirect, session, send_file, flash, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from cryptography.fernet import Fernet
+from flask_mail import Mail, Message
+from dotenv import load_dotenv
+
 import sqlite3
 import os
 import uuid
@@ -9,13 +12,9 @@ import datetime
 import io
 import re
 import random
-from flask_mail import Mail, Message
-from dotenv import load_dotenv
-from flask_mail import Mail, Message
-import os
-from flask import jsonify
-import random
-# other imports...
+
+# ================= LOAD ENV =================
+load_dotenv()
 
 # ================= HELPERS =================
 def generate_otp():
@@ -24,17 +23,23 @@ def generate_otp():
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
-load_dotenv()
 
 # ================= ADMIN =================
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
 
+
 # ================= APP INIT =================
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY")
+
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-DB_PATH = os.path.join(os.getcwd(), "instance","database.db")
+
+INSTANCE_DIR = os.path.join(BASE_DIR, "instance")
+os.makedirs(INSTANCE_DIR, exist_ok=True)
+
+DB_PATH = os.path.join(INSTANCE_DIR, "database.db")
+
 
 # ================= MAIL CONFIG =================
 app.config["MAIL_SERVER"] = "smtp.gmail.com"
@@ -45,6 +50,8 @@ app.config["MAIL_PASSWORD"] = os.getenv("MAIL_PASSWORD")
 app.config["MAIL_DEFAULT_SENDER"] = app.config["MAIL_USERNAME"]
 
 mail = Mail(app)
+
+
 # ================= ENCRYPTION =================
 FERNET_KEY = os.getenv("FERNET_KEY")
 
@@ -52,6 +59,8 @@ if not FERNET_KEY:
     raise ValueError("FERNET_KEY environment variable not set")
 
 fernet = Fernet(FERNET_KEY.encode())
+
+
 # ================= CONFIG =================
 UPLOAD_FOLDER = "uploads"
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
@@ -66,9 +75,8 @@ ALLOWED_EXTENSIONS = {
 }
 
 # ================= DATABASE INIT =================
+# ================= DATABASE INIT =================
 def init_db():
-    os.makedirs("instance", exist_ok=True)
-
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
@@ -84,7 +92,7 @@ def init_db():
     )
     """)
 
-    # FILES TABLE (VERY IMPORTANT - you were missing it in logs)
+    # FILES TABLE
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS files (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -110,19 +118,17 @@ def init_db():
     conn.commit()
     conn.close()
 
+
 def migrate_db():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
-    # Check existing columns in users table
     cursor.execute("PRAGMA table_info(users)")
     columns = [col[1] for col in cursor.fetchall()]
 
-    # Add status column if missing
     if "status" not in columns:
         cursor.execute("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'Active'")
 
-    # Add last_login column if missing
     if "last_login" not in columns:
         cursor.execute("ALTER TABLE users ADD COLUMN last_login TEXT")
 
@@ -130,19 +136,17 @@ def migrate_db():
     conn.close()
 
 
-if __name__ == "__main__":
-    init_db()
-    # app.run(...) keep your existing app run line here
+# ⚠️ REMOVE THIS FROM HERE (MOVE TO END OF FILE)
+# if __name__ == "__main__":
+#     init_db()
 
-# ================= HELPERS =================
-def allowed_file(filename):
-    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 # ================= HOME =================
 @app.route("/")
 def home():
     return render_template("home.html")
 
+# ================= REGISTER =================
 # ================= REGISTER =================
 @app.route("/register", methods=["GET", "POST"])
 def register():
@@ -160,7 +164,6 @@ def register():
             return "Please enter a valid email address"
 
         # Strong Password Validation
-
         if len(password) < 8:
             return "Password must be at least 8 characters"
 
@@ -179,12 +182,7 @@ def register():
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
 
-        # Check duplicate email
-        cursor.execute(
-            "SELECT * FROM users WHERE email=?",
-            (email,)
-        )
-
+        cursor.execute("SELECT * FROM users WHERE email=?", (email,))
         existing_user = cursor.fetchone()
 
         if existing_user:
@@ -205,18 +203,19 @@ def register():
 
     return render_template("register.html")
 
-# ================= LOGIN =================
 
+# ================= LOGIN =================
 @app.route("/login", methods=["GET", "POST"])
 def login():
 
     print("LOGIN ROUTE HIT")
 
-    if "login_attempts" not in session:
-        session["login_attempts"] = 0
+    # safe init
+    session.setdefault("login_attempts", 0)
 
     if request.method == "POST":
 
+        # if OTP already active → force verify page
         if session.get("otp_lock"):
             return redirect("/verify_otp")
 
@@ -232,6 +231,7 @@ def login():
         # ================= ADMIN LOGIN =================
         if email == ADMIN_EMAIL and password == ADMIN_PASSWORD:
 
+            session.clear()
             session["admin"] = True
             session["user_name"] = "Admin"
             session["email"] = ADMIN_EMAIL
@@ -239,7 +239,6 @@ def login():
 
             return redirect("/admin")
 
-        # ================= NORMAL USER LOGIN =================
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
 
@@ -257,19 +256,17 @@ def login():
             remaining = 5 - session["login_attempts"]
             return f"Invalid Email or Password.<br><br>Attempts Remaining: {remaining}"
 
-        # ================= BLOCKED USER =================
+        # BLOCKED USER
         if user[3] == "Blocked":
             conn.close()
             return render_template("blocked.html")
 
-        # ================= PASSWORD CHECK =================
+        # PASSWORD CHECK
         if check_password_hash(user[2], password):
-
-            print("GENERATING OTP")
 
             session["login_attempts"] = 0
 
-            # ================= UPDATE LAST LOGIN =================
+            # update last login
             cursor.execute("""
                 UPDATE users 
                 SET last_login=? 
@@ -278,21 +275,19 @@ def login():
                 datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 email
             ))
-
             conn.commit()
 
-            # ================= GENERATE OTP =================
+            # OTP
             otp = str(random.randint(100000, 999999))
 
             session["otp"] = otp
             session["otp_time"] = datetime.datetime.now().timestamp()
             session["otp_attempts"] = 0
+            session["otp_lock"] = True
 
             session["temp_name"] = user[0]
             session["temp_email"] = user[1]
-            session["otp_lock"] = True
 
-            # ================= SEND EMAIL OTP =================
             try:
                 msg = Message(
                     subject="SecureCloud Login OTP",
@@ -307,9 +302,6 @@ Your OTP for SecureCloud login is: {otp}
 This OTP is valid for 2 minutes.
 
 If this wasn't you, please ignore this email.
-
-Regards,
-SecureCloud Team
 """
 
                 mail.send(msg)
@@ -321,9 +313,7 @@ SecureCloud Team
             conn.close()
             return redirect("/verify_otp")
 
-        # ================= FAILED LOGIN =================
         conn.close()
-
         session["login_attempts"] += 1
         remaining = 5 - session["login_attempts"]
 
@@ -333,6 +323,7 @@ SecureCloud Team
         """
 
     return render_template("login.html")
+
 
 
 @app.route("/forgot_password", methods=["GET", "POST"])
@@ -427,12 +418,10 @@ def verify_otp():
 
     if request.method == "POST":
 
-        # OTP expires after 2 minutes
         current_time = datetime.datetime.now().timestamp()
 
         if current_time - session["otp_time"] > 120:
 
-            # Cleanup OTP session data
             session.pop("otp", None)
             session.pop("otp_time", None)
             session.pop("temp_name", None)
@@ -449,23 +438,21 @@ def verify_otp():
             session["user_name"] = session["temp_name"]
             session["email"] = session["temp_email"]
 
-            # Reset counters
             session["login_attempts"] = 0
             session["otp_attempts"] = 0
 
-            # Remove OTP lock
             session.pop("otp_lock", None)
 
-            # Log login activity
+            # LOG LOGIN
             conn = sqlite3.connect(DB_PATH)
             cursor = conn.cursor()
 
             cursor.execute("""
-                INSERT INTO logs
-                (username, filename, action, timestamp)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO logs (username, email, filename, action, timestamp)
+                VALUES (?, ?, ?, ?, ?)
             """, (
                 session["user_name"],
+                session["email"],
                 "LOGIN",
                 "LOGIN",
                 datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -474,17 +461,16 @@ def verify_otp():
             conn.commit()
             conn.close()
 
-            # Cleanup OTP session data
             session.pop("otp", None)
             session.pop("otp_time", None)
             session.pop("temp_name", None)
             session.pop("temp_email", None)
             session.pop("otp_attempts", None)
             session.pop("otp_lock", None)
-            
+
             return redirect("/dashboard")
 
-        # Wrong OTP
+        # WRONG OTP
         session["otp_attempts"] += 1
 
         if session["otp_attempts"] >= 3:
@@ -496,19 +482,14 @@ def verify_otp():
             session.pop("otp_attempts", None)
             session.pop("otp_lock", None)
 
-            return """
-            Too many incorrect OTP attempts.
-            Please login again.
-            """
+            return "Too many incorrect OTP attempts. Please login again."
 
         remaining = 3 - session["otp_attempts"]
 
-        return f"""
-        Invalid OTP.<br><br>
-        Attempts Remaining: {remaining}
-        """
+        return f"Invalid OTP.<br><br>Attempts Remaining: {remaining}"
 
     return render_template("verify_otp.html")
+
 
 @app.route("/verify_reset_otp", methods=["GET", "POST"])
 def verify_reset_otp():
@@ -520,7 +501,6 @@ def verify_reset_otp():
 
         entered_otp = request.form["otp"]
 
-        # OTP expiry (2 minutes)
         current_time = datetime.datetime.now().timestamp()
 
         if current_time - session["reset_otp_time"] > 120:
@@ -532,13 +512,11 @@ def verify_reset_otp():
             return "OTP Expired. Please try again."
 
         if entered_otp == session["reset_otp"]:
-
             return redirect("/reset_password")
 
         return "Invalid OTP"
 
     return render_template("verify_reset_otp.html")
-
 
 # ================= DASHBOARD =================
 @app.route("/dashboard")
@@ -553,22 +531,33 @@ def dashboard():
     # ----------------------------
     # TOTAL FILES
     # ----------------------------
-    cursor.execute("SELECT COUNT(*) FROM files WHERE username=?", (session["user_name"],))
+    cursor.execute(
+        "SELECT COUNT(*) FROM files WHERE username=?",
+        (session["user_name"],)
+    )
     total_files = cursor.fetchone()[0]
 
     # ----------------------------
-    # ACTIVITY COUNTS (SPLIT)
+    # ACTIVITY COUNTS
     # ----------------------------
-    cursor.execute("SELECT COUNT(*) FROM logs WHERE username=? AND action='UPLOAD'", (session["user_name"],))
+    cursor.execute(
+        "SELECT COUNT(*) FROM logs WHERE username=? AND action='UPLOAD'",
+        (session["user_name"],)
+    )
     upload_count = cursor.fetchone()[0]
 
-    cursor.execute("SELECT COUNT(*) FROM logs WHERE username=? AND action='DOWNLOAD'", (session["user_name"],))
+    cursor.execute(
+        "SELECT COUNT(*) FROM logs WHERE username=? AND action='DOWNLOAD'",
+        (session["user_name"],)
+    )
     download_count = cursor.fetchone()[0]
 
-    cursor.execute("SELECT COUNT(*) FROM logs WHERE username=? AND action='DELETE'", (session["user_name"],))
+    cursor.execute(
+        "SELECT COUNT(*) FROM logs WHERE username=? AND action='DELETE'",
+        (session["user_name"],)
+    )
     delete_count = cursor.fetchone()[0]
 
-    # TOTAL ACTIVITY
     activity_count = upload_count + download_count + delete_count
 
     # ----------------------------
@@ -583,10 +572,14 @@ def dashboard():
     """, (session["user_name"],))
 
     last = cursor.fetchone()
-    last_activity = f"{last[0]} - {last[1]}" if last else "No activity yet"
+
+    if last:
+        last_activity = f"{last[0]} - {last[1]}"
+    else:
+        last_activity = "No activity yet"
 
     # ----------------------------
-    # RECENT 5 LOGS (PREVIEW)
+    # RECENT LOGS
     # ----------------------------
     cursor.execute("""
         SELECT action, filename, timestamp 
@@ -603,13 +596,20 @@ def dashboard():
     # ----------------------------
     total_size = 0
 
-    cursor.execute("SELECT stored_name FROM files WHERE username=?", (session["user_name"],))
+    cursor.execute(
+        "SELECT stored_name FROM files WHERE username=?",
+        (session["user_name"],)
+    )
+
     files = cursor.fetchall()
 
     for f in files:
-        path = os.path.join(app.config["UPLOAD_FOLDER"], f[0])
-        if os.path.exists(path):
-            total_size += os.path.getsize(path)
+        try:
+            path = os.path.join(app.config["UPLOAD_FOLDER"], f[0])
+            if os.path.exists(path):
+                total_size += os.path.getsize(path)
+        except Exception:
+            continue
 
     storage_mb = round(total_size / (1024 * 1024), 2)
 
@@ -664,22 +664,19 @@ def upload_file():
             # Create unique filename
             unique_name = str(uuid.uuid4()) + "_" + original_name
 
-            path = os.path.join(
-                app.config["UPLOAD_FOLDER"],
-                unique_name
-            )
+            # Ensure upload folder exists (important for Render)
+            os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
-            # Encrypt file
-            encrypted_data = fernet.encrypt(
-                file.read()
-            )
+            path = os.path.join(app.config["UPLOAD_FOLDER"], unique_name)
+
+            # Encrypt file safely
+            file_data = file.read()
+            encrypted_data = fernet.encrypt(file_data)
 
             with open(path, "wb") as f:
                 f.write(encrypted_data)
 
-            upload_date = datetime.datetime.now().strftime(
-                "%Y-%m-%d %H:%M:%S"
-            )
+            upload_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
             # Store file record
             cursor.execute("""
@@ -696,19 +693,19 @@ def upload_file():
             # Activity log
             cursor.execute("""
                 INSERT INTO logs
-                (username, email, action, filename, timestamp)
+                (username, email, filename, action, timestamp)
                 VALUES (?, ?, ?, ?, ?)
             """, (
-               session["user_name"],
-               session["email"],
-               "UPLOAD",
-               original_name,
-               upload_date
+                session["user_name"],
+                session["email"],
+                original_name,
+                "UPLOAD",
+                upload_date
             ))
+
             conn.commit()
             conn.close()
 
-            # Success message
             session["message"] = "✅ File uploaded successfully!"
 
             return redirect("/dashboard")
@@ -721,7 +718,7 @@ def upload_file():
 @app.route("/upload_ajax", methods=["POST"])
 def upload_ajax():
 
-    file = request.files["file"]
+    file = request.files.get("file")
     user = session.get("user_name")
 
     if not file:
@@ -730,9 +727,19 @@ def upload_ajax():
     if not user:
         return jsonify({"status": "error", "message": "Unauthorized"})
 
+    if file.filename == "":
+        return jsonify({"status": "error", "message": "No file selected"})
+
+    # ✅ ADD FILE TYPE CHECK (IMPORTANT FIX)
+    if not allowed_file(file.filename):
+        return jsonify({"status": "error", "message": "Invalid file type"})
+
     filename = secure_filename(file.filename)
 
     unique_name = str(uuid.uuid4()) + "_" + filename
+
+    os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+
     path = os.path.join(app.config["UPLOAD_FOLDER"], unique_name)
 
     # Encrypt the file
@@ -740,11 +747,13 @@ def upload_ajax():
 
     with open(path, "wb") as f:
         f.write(encrypted_data)
-  
-    
+
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
 
+    upload_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # FILE TABLE ENTRY
     cur.execute("""
         INSERT INTO files (filename, stored_name, username, upload_date)
         VALUES (?, ?, ?, ?)
@@ -752,13 +761,26 @@ def upload_ajax():
         filename,
         unique_name,
         user,
-        datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        upload_time
+    ))
+
+    # ✅ ADD LOG ENTRY (VERY IMPORTANT FIX)
+    cur.execute("""
+        INSERT INTO logs (username, email, filename, action, timestamp)
+        VALUES (?, ?, ?, ?, ?)
+    """, (
+        user,
+        session.get("email", ""),
+        filename,
+        "UPLOAD",
+        upload_time
     ))
 
     conn.commit()
     conn.close()
 
     return jsonify({"status": "success", "message": "File uploaded successfully"})
+
 # ================= FILES =================
 @app.route("/files")
 def files():
@@ -766,7 +788,7 @@ def files():
     if "user_name" not in session:
         return redirect("/login")
 
-    search = request.args.get("search", "")
+    search = request.args.get("search", "").strip()
 
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
@@ -775,36 +797,63 @@ def files():
         SELECT filename, stored_name, upload_date
         FROM files
         WHERE username=? AND filename LIKE ?
-    """, (session["user_name"], "%" + search + "%"))
+        ORDER BY upload_date DESC
+    """, (
+        session["user_name"],
+        "%" + search + "%"
+    ))
 
     rows = cursor.fetchall()
+
     conn.close()
 
     columns = ["filename", "stored_name", "upload_date"]
     data = [dict(zip(columns, row)) for row in rows]
 
-    return render_template("files.html", files=data, search=search)
+    return render_template(
+        "files.html",
+        files=data,
+        search=search
+    )
 
 @app.route("/profile")
 def profile():
+
     if "user_name" not in session:
         return redirect("/login")
 
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
-    cursor.execute("SELECT name, email FROM users WHERE email=?", (session["email"],))
+    # Get user details
+    cursor.execute(
+        "SELECT name, email FROM users WHERE email=?",
+        (session["email"],)
+    )
     user = cursor.fetchone()
 
-    cursor.execute("SELECT COUNT(*) FROM files WHERE username=?", (session["user_name"],))
+    # Get total uploaded files count
+    cursor.execute(
+        "SELECT COUNT(*) FROM files WHERE username=?",
+        (session["user_name"],)
+    )
     total_files = cursor.fetchone()[0]
 
+    # Calculate storage usage
     total_size = 0
-    cursor.execute("SELECT stored_name FROM files WHERE username=?", (session["user_name"],))
+
+    cursor.execute(
+        "SELECT stored_name FROM files WHERE username=?",
+        (session["user_name"],)
+    )
     files = cursor.fetchall()
 
-    for f in files:
-        path = os.path.join(app.config["UPLOAD_FOLDER"], f[0])
+    for file_record in files:
+        path = os.path.join(
+            app.config["UPLOAD_FOLDER"],
+            file_record[0]
+        )
+
         if os.path.exists(path):
             total_size += os.path.getsize(path)
 
@@ -828,12 +877,26 @@ def edit_profile():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
-    cursor.execute("SELECT name, email FROM users WHERE email=?", (session["email"],))
+    cursor.execute(
+        "SELECT name, email FROM users WHERE email=?",
+        (session["email"],)
+    )
     user = cursor.fetchone()
+
+    # Safety check (should rarely happen)
+    if not user:
+        conn.close()
+        session.clear()
+        return redirect("/login")
 
     if request.method == "POST":
 
-        new_name = request.form["name"]
+        new_name = request.form["name"].strip()
+
+        # Prevent empty names
+        if not new_name:
+            conn.close()
+            return "Name cannot be empty"
 
         cursor.execute(
             "UPDATE users SET name=? WHERE email=?",
@@ -843,43 +906,63 @@ def edit_profile():
         conn.commit()
         conn.close()
 
+        # Update session so the new name appears everywhere
         session["user_name"] = new_name
 
         return redirect("/profile")
 
     conn.close()
 
-    return render_template("edit_profile.html", user=user)
+    return render_template(
+        "edit_profile.html",
+        user=user
+    )
 
 
 @app.route("/storage")
 def storage():
+
     if "user_name" not in session:
         return redirect("/login")
 
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
-    # total files
-    cursor.execute("SELECT COUNT(*) FROM files WHERE username=?", (session["user_name"],))
+    # Total files uploaded by the user
+    cursor.execute(
+        "SELECT COUNT(*) FROM files WHERE username=?",
+        (session["user_name"],)
+    )
     total_files = cursor.fetchone()[0]
 
-    # calculate storage used
+    # Calculate storage used
     total_size = 0
 
-    cursor.execute("SELECT stored_name FROM files WHERE username=?", (session["user_name"],))
+    cursor.execute(
+        "SELECT stored_name FROM files WHERE username=?",
+        (session["user_name"],)
+    )
     files = cursor.fetchall()
 
-    for f in files:
-        path = os.path.join(app.config["UPLOAD_FOLDER"], f[0])
+    for file_record in files:
+        path = os.path.join(
+            app.config["UPLOAD_FOLDER"],
+            file_record[0]
+        )
+
+        # Ignore missing files safely
         if os.path.exists(path):
             total_size += os.path.getsize(path)
 
     storage_mb = round(total_size / (1024 * 1024), 2)
 
-    # optional: assume max limit (for UI)
-    max_storage = 100  # MB
-    used_percent = min((storage_mb / max_storage) * 100, 100)
+    # Maximum storage limit used for UI display
+    max_storage = 1024 # MB
+
+    used_percent = min(
+        (storage_mb / max_storage) * 100,
+        100
+    )
 
     conn.close()
 
@@ -905,12 +988,18 @@ def security():
         FROM logs
         WHERE username=?
         ORDER BY id DESC
-    """, (session["user_name"],))
+    """, (
+        session["user_name"],
+    ))
 
     logs = cursor.fetchall()
+
     conn.close()
 
-    return render_template("security.html", logs=logs)
+    return render_template(
+        "security.html",
+        logs=logs
+    )
 
 # ================= DOWNLOAD =================
 @app.route("/download/<stored_name>")
@@ -922,10 +1011,15 @@ def download_file(stored_name):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
-    cursor.execute(
-        "SELECT filename FROM files WHERE stored_name=?",
-        (stored_name,)
-    )
+    # IMPORTANT: verify ownership
+    cursor.execute("""
+        SELECT filename
+        FROM files
+        WHERE stored_name=? AND username=?
+    """, (
+        stored_name,
+        session["user_name"]
+    ))
 
     result = cursor.fetchone()
 
@@ -935,6 +1029,7 @@ def download_file(stored_name):
 
     original_name = result[0]
 
+    # Log download activity
     cursor.execute("""
         INSERT INTO logs (username, email, filename, action, timestamp)
         VALUES (?, ?, ?, ?, ?)
@@ -949,17 +1044,28 @@ def download_file(stored_name):
     conn.commit()
     conn.close()
 
-    file_path = os.path.join(app.config["UPLOAD_FOLDER"], stored_name)
+    file_path = os.path.join(
+        app.config["UPLOAD_FOLDER"],
+        stored_name
+    )
 
-    with open(file_path, "rb") as f:
-        encrypted = f.read()
+    # Check if physical file exists
+    if not os.path.exists(file_path):
+        return "File not found"
 
-    decrypted = fernet.decrypt(encrypted)
+    try:
+        with open(file_path, "rb") as f:
+            encrypted = f.read()
+
+        decrypted = fernet.decrypt(encrypted)
+
+    except Exception:
+        return "Unable to decrypt file"
 
     return send_file(
         io.BytesIO(decrypted),
         as_attachment=True,
-        download_name=str(original_name),
+        download_name=original_name,
         mimetype="application/octet-stream"
     )
 
@@ -973,11 +1079,15 @@ def delete_file(stored_name):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
-    # Get original filename before deleting
-    cursor.execute(
-        "SELECT filename FROM files WHERE stored_name=? AND username=?",
-        (stored_name, session["user_name"])
-    )
+    # Verify ownership and get original filename
+    cursor.execute("""
+        SELECT filename
+        FROM files
+        WHERE stored_name=? AND username=?
+    """, (
+        stored_name,
+        session["user_name"]
+    ))
 
     result = cursor.fetchone()
 
@@ -988,27 +1098,35 @@ def delete_file(stored_name):
     original_name = result[0]
 
     # Delete physical file
-    path = os.path.join(app.config["UPLOAD_FOLDER"], stored_name)
+    path = os.path.join(
+        app.config["UPLOAD_FOLDER"],
+        stored_name
+    )
 
     if os.path.exists(path):
         os.remove(path)
 
     # Log DELETE activity
     cursor.execute("""
-        INSERT INTO logs (username, filename, action, timestamp)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO logs
+        (username, email, filename, action, timestamp)
+        VALUES (?, ?, ?, ?, ?)
     """, (
         session["user_name"],
+        session["email"],
         original_name,
         "DELETE",
         datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     ))
 
     # Delete database record
-    cursor.execute(
-        "DELETE FROM files WHERE stored_name=? AND username=?",
-        (stored_name, session["user_name"])
-    )
+    cursor.execute("""
+        DELETE FROM files
+        WHERE stored_name=? AND username=?
+    """, (
+        stored_name,
+        session["user_name"]
+    ))
 
     conn.commit()
     conn.close()
@@ -1026,14 +1144,23 @@ def admin_login():
 
     if request.method == "POST":
 
-        email = request.form["email"]
+        email = request.form["email"].strip()
         password = request.form["password"]
 
         if email == ADMIN_EMAIL and password == ADMIN_PASSWORD:
+
             session["admin"] = True
+
+            # Keep admin session data consistent
+            session["user_name"] = "Admin"
+            session["email"] = ADMIN_EMAIL
+
             return redirect("/admin")
 
-        return render_template("admin_login.html", error="Invalid Credentials")
+        return render_template(
+            "admin_login.html",
+            error="Invalid Credentials"
+        )
 
     return render_template("admin_login.html")
 
@@ -1064,8 +1191,11 @@ def admin():
     cursor.execute("SELECT stored_name FROM files")
     stored_files = cursor.fetchall()
 
-    for file in stored_files:
-        path = os.path.join(app.config["UPLOAD_FOLDER"], file[0])
+    for file_record in stored_files:
+        path = os.path.join(
+            app.config["UPLOAD_FOLDER"],
+            file_record[0]
+        )
 
         if os.path.exists(path):
             total_storage += os.path.getsize(path)
@@ -1091,8 +1221,9 @@ def admin():
         name = user[0]
         email = user[1]
         last_login = user[2]
-        status=user[3]
+        status = user[3]
 
+        # IMPORTANT FIX: count by email instead of name
         cursor.execute(
             "SELECT COUNT(*) FROM files WHERE username=?",
             (name,)
@@ -1108,10 +1239,10 @@ def admin():
 
     cursor.execute("""
         SELECT username,
-            email,
-            action,
-            filename,
-            timestamp
+               email,
+               action,
+               filename,
+               timestamp
         FROM logs
         ORDER BY timestamp DESC
         LIMIT 10
@@ -1131,7 +1262,6 @@ def admin():
         recent_logs=recent_logs
     )
 
-
 @app.route("/admin_logout")
 def admin_logout():
 
@@ -1140,8 +1270,13 @@ def admin_logout():
     return redirect("/admin_login")
 
 
-@app.route('/block_user/<email>')
+@app.route("/block_user/<email>")
 def block_user(email):
+
+    # IMPORTANT: Only admins should access this route
+    if "admin" not in session:
+        return redirect("/admin_login")
+
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
@@ -1153,11 +1288,16 @@ def block_user(email):
     conn.commit()
     conn.close()
 
-    return redirect('/admin')
+    return redirect("/admin")
 
 
-@app.route('/unblock_user/<email>')
+@app.route("/unblock_user/<email>")
 def unblock_user(email):
+
+    # Only admins can unblock users
+    if "admin" not in session:
+        return redirect("/admin_login")
+
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
@@ -1169,21 +1309,47 @@ def unblock_user(email):
     conn.commit()
     conn.close()
 
-    return redirect('/admin')
+    return redirect("/admin")
 
 @app.route("/delete_user/<email>")
 def delete_user(email):
+
+    # Only admins can delete users
+    if "admin" not in session:
+        return redirect("/admin_login")
+
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
 
-    cur.execute("DELETE FROM users WHERE email=?", (email,))
+    # Get user's name before deleting
+    cur.execute(
+        "SELECT name FROM users WHERE email=?",
+        (email,)
+    )
+
+    user = cur.fetchone()
+
+    if not user:
+        conn.close()
+        return redirect("/admin")
+
+    username = user[0]
+
+    # Delete the user
+    cur.execute(
+        "DELETE FROM users WHERE email=?",
+        (email,)
+    )
+
     conn.commit()
     conn.close()
 
     return redirect("/admin")
 
+
 @app.route("/activity_log")
 def activity_log():
+
     if "user_name" not in session:
         return redirect("/login")
 
@@ -1192,24 +1358,30 @@ def activity_log():
     cursor = conn.cursor()
 
     cursor.execute("""
-        SELECT action, filename, timestamp
+        SELECT action,
+               filename,
+               timestamp
         FROM logs
         WHERE username=?
         ORDER BY timestamp DESC
-    """, (session["user_name"],))
+    """, (
+        session["user_name"],
+    ))
 
     logs = cursor.fetchall()
+
     conn.close()
 
-    return render_template("activity_log.html", logs=logs)
+    return render_template(
+        "activity_log.html",
+        logs=logs
+    )
+# ================= DATABASE STARTUP =================
+with app.app_context():
+    init_db()
+    migrate_db()
 
-# ================= RUN =================
+
+# ================= LOCAL RUN =================
 if __name__ == "__main__":
-
-    print("INITIALIZING DATABASE...")
-    with app.app_context():
-        init_db()
-        migrate_db()
-    print("DATABASE READY")
-
-    app.run(debug=False)
+    app.run(debug=True)
