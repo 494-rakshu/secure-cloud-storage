@@ -232,7 +232,7 @@ def login():
         if email == ADMIN_EMAIL and password == ADMIN_PASSWORD:
 
             session.clear()
-            session["admin"] = True
+            session["role"] = "admin"
             session["user_name"] = "Admin"
             session["email"] = ADMIN_EMAIL
             session["login_attempts"] = 0
@@ -254,7 +254,7 @@ def login():
             conn.close()
             session["login_attempts"] += 1
             remaining = 5 - session["login_attempts"]
-            return f"Invalid Email or Password.<br><br>Attempts Remaining: {remaining}"
+            return render_template("login.html", error="Invalid Email or Password")
 
         # BLOCKED USER
         if user[3] == "Blocked":
@@ -1149,9 +1149,8 @@ def admin_login():
 
         if email == ADMIN_EMAIL and password == ADMIN_PASSWORD:
 
-            session["admin"] = True
-
-            # Keep admin session data consistent
+            # safer role-based session (better than session["admin"] = True)
+            session["role"] = "admin"
             session["user_name"] = "Admin"
             session["email"] = ADMIN_EMAIL
 
@@ -1168,7 +1167,8 @@ def admin_login():
 @app.route("/admin")
 def admin():
 
-    if "admin" not in session:
+    # ✅ FIX 1: updated session check (IMPORTANT)
+    if session.get("role") != "admin":
         return redirect("/admin_login")
 
     conn = sqlite3.connect(DB_PATH)
@@ -1223,10 +1223,10 @@ def admin():
         last_login = user[2]
         status = user[3]
 
-        # IMPORTANT FIX: count by email instead of name
+        # ✅ FIX 2: IMPORTANT BUG FIX (use email instead of name)
         cursor.execute(
             "SELECT COUNT(*) FROM files WHERE username=?",
-            (name,)
+            (email,)
         )
 
         file_count = cursor.fetchone()[0]
@@ -1270,11 +1270,11 @@ def admin_logout():
     return redirect("/admin_login")
 
 
+
 @app.route("/block_user/<email>")
 def block_user(email):
 
-    # IMPORTANT: Only admins should access this route
-    if "admin" not in session:
+    if session.get("role") != "admin":
         return redirect("/admin_login")
 
     conn = sqlite3.connect(DB_PATH)
@@ -1294,8 +1294,7 @@ def block_user(email):
 @app.route("/unblock_user/<email>")
 def unblock_user(email):
 
-    # Only admins can unblock users
-    if "admin" not in session:
+    if session.get("role") != "admin":
         return redirect("/admin_login")
 
     conn = sqlite3.connect(DB_PATH)
@@ -1314,14 +1313,12 @@ def unblock_user(email):
 @app.route("/delete_user/<email>")
 def delete_user(email):
 
-    # Only admins can delete users
-    if "admin" not in session:
+    if session.get("role") != "admin":
         return redirect("/admin_login")
 
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
 
-    # Get user's name before deleting
     cur.execute(
         "SELECT name FROM users WHERE email=?",
         (email,)
@@ -1335,7 +1332,6 @@ def delete_user(email):
 
     username = user[0]
 
-    # Delete the user
     cur.execute(
         "DELETE FROM users WHERE email=?",
         (email,)
